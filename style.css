@@ -1,0 +1,26 @@
+body { 
+    margin: 0; 
+    padding: 0; 
+    overflow: hidden; 
+    background: #000; 
+}
+
+#container { 
+    width: 100vw; 
+    height: 100vh; 
+}
+
+#instruction-text {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    color: #ffffff;
+    font-family: Arial, sans-serif;
+    font-size: 48px;
+    font-weight: bold;
+    text-align: center;
+    z-index: 1;
+    pointer-events: none;
+    opacity: 0.7;
+}
