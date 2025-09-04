@@ -1,0 +1,9 @@
+{
+    "name": "Interactive Cursor",
+    "title": "Interactive Cursor",
+    "subtitle": "Interactive Cursor",
+    "version": "1.0.0",
+    "description": "An interactive cursor app for SquidlyV3",
+    "author": "Po-Yao Huang",
+    "icon": "calibrate"
+}
