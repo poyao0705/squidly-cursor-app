@@ -2,145 +2,22 @@
 // Transparent, pointer-events:none canvas overlay that renders a fluid trail
 // Works with external input sources (eye-gaze, manual splashes, etc.)
 
-// === Input Strategy Pattern =================================================
+// === Simplified Input Manager ================================================
 
 /**
- * Abstract base class for input strategies
- */
-class InputStrategy {
-  constructor(fluidCursor) {
-    this.fluidCursor = fluidCursor;
-  }
-
-  updatePointerPosition(x, y, color = null, id = "default") {
-    throw new Error("updatePointerPosition must be implemented by subclass");
-  }
-
-  getPointer() {
-    throw new Error("getPointer must be implemented by subclass");
-  }
-}
-
-/**
- * Mouse input strategy
- */
-class MouseInputStrategy extends InputStrategy {
-  constructor(fluidCursor) {
-    super(fluidCursor);
-  }
-
-  updatePointerPosition(x, y, color = null, id = "default") {
-    const p = this.fluidCursor._getOrCreatePointer("mouse", id, color);
-    const posX = this.fluidCursor._scaleByPixelRatio(x);
-    const posY = this.fluidCursor._scaleByPixelRatio(y);
-    this.fluidCursor._updatePointerMoveData(p, posX, posY, color || p.color);
-  }
-
-  getPointer(id = "default") {
-    return this.fluidCursor.pointerMap.get(
-      this.fluidCursor._pointerKey("mouse", id)
-    );
-  }
-}
-
-/**
- * Eye-gaze input strategy
- */
-class EyeGazeInputStrategy extends InputStrategy {
-  constructor(fluidCursor) {
-    super(fluidCursor);
-  }
-
-  updatePointerPosition(x, y, color = null, id = "default") {
-    const p = this.fluidCursor._getOrCreatePointer("eye-gaze", id, color);
-
-    const posX = x * this.fluidCursor.canvas.width;
-    const posY = (1 - y) * this.fluidCursor.canvas.height;
-    this.fluidCursor._updatePointerMoveData(p, posX, posY, color || p.color);
-  }
-
-  getPointer(id = "default") {
-    return this.fluidCursor._getOrCreatePointer("eye-gaze", id, color);
-  }
-}
-
-// === Input Factory Pattern =================================================
-
-/**
- * Factory for creating input strategies using a map for faster access
- */
-class InputStrategyFactory {
-  static #strategyMap = new Map([
-    ["mouse", MouseInputStrategy],
-    ["eye-gaze", EyeGazeInputStrategy],
-  ]);
-
-  static createStrategy(type, fluidCursor) {
-    const StrategyClass = this.#strategyMap.get(type);
-    if (!StrategyClass) {
-      throw new Error(`Unknown input strategy type: ${type}`);
-    }
-    return new StrategyClass(fluidCursor);
-  }
-
-  static registerStrategy(type, StrategyClass) {
-    this.#strategyMap.set(type, StrategyClass);
-  }
-
-  static hasStrategy(type) {
-    return this.#strategyMap.has(type);
-  }
-
-  static getAvailableTypes() {
-    return Array.from(this.#strategyMap.keys());
-  }
-}
-
-// === Abstract Input Manager ================================================
-
-/**
- * Manages multiple input sources using strategies
+ * Manages pointer input - all pointers use mouse strategy
  */
 class InputManager {
   constructor(fluidCursor) {
     this.fluidCursor = fluidCursor;
-    this.strategies = new Map();
-    this.activeInputs = new Set(["mouse"]); // Mouse is active by default
-
-    // Initialize strategies
-    this.strategies.set(
-      "mouse",
-      InputStrategyFactory.createStrategy("mouse", fluidCursor)
-    );
-    this.strategies.set(
-      "eye-gaze",
-      InputStrategyFactory.createStrategy("eye-gaze", fluidCursor)
-    );
   }
 
-  updatePointerPosition(inputType, x, y, color = null, id = "default") {
-    if (!this.activeInputs.has(inputType)) return;
-
-    const strategy = this.strategies.get(inputType);
-    if (strategy) {
-      strategy.updatePointerPosition(x, y, color, id);
-    }
-  }
-
-  toggleInput(inputType, enabled) {
-    if (enabled) {
-      this.activeInputs.add(inputType);
-    } else {
-      this.activeInputs.delete(inputType);
-    }
-  }
-
-  getActiveInputs() {
-    return Array.from(this.activeInputs);
-  }
-
-  getStrategy(inputType) {
-    return this.strategies.get(inputType);
+  updatePointerPosition(x, y, color = null, id = "default") {
+    // All pointers use mouse strategy
+    const p = this.fluidCursor._getOrCreatePointer(id, color);
+    const posX = this.fluidCursor._scaleByPixelRatio(x);
+    const posY = this.fluidCursor._scaleByPixelRatio(y);
+    this.fluidCursor._updatePointerMoveData(p, posX, posY, color || p.color);
   }
 }
 
@@ -165,11 +42,10 @@ class WebGLFluidCursor {
     // Pointer storage: array for the pipeline, plus a fast lookup map
     this.pointers = [];
     this.pointerMap = new Map(); // key => pointer
-    // Register default pointers so current code keeps working
-    this._registerPointer("mouse", "default", "#00ff88");
-    // this._registerPointer("eye-gaze", "default");
+    // Register default mouse pointer
+    this._registerPointer("default", "#00ff88");
 
-    // Input manager using strategy pattern
+    // Simplified input manager
     this.inputManager = new InputManager(this);
 
     // default config
@@ -256,21 +132,11 @@ class WebGLFluidCursor {
 
   // === Public API ==========================================================
 
-  /** Toggle input source (mouse, eye-gaze, etc.) */
-  toggleInput(inputType, enabled) {
-    this.inputManager.toggleInput(inputType, enabled);
-  }
-
-  /** Get current active input sources */
-  getActiveInputs() {
-    return this.inputManager.getActiveInputs();
-  }
-
   /** Manually create a splash at client pixel coordinates */
   splashAtClient(x, y, color = [0.5, 0.5, 0.5], id = "default") {
     const posX = this._scaleByPixelRatio(x);
     const posY = this._scaleByPixelRatio(y);
-    const p = this._getOrCreatePointer("mouse", id, color); // Use mouse pointer for manual splashes
+    const p = this._getOrCreatePointer(id, color); // Use mouse pointer for manual splashes
     p.texcoordX = posX / this.canvas.width;
     p.texcoordY = 1.0 - posY / this.canvas.height;
     p.deltaX = 0;
@@ -297,7 +163,6 @@ class WebGLFluidCursor {
 
   _onMouseMove(e, id = "default") {
     this.inputManager.updatePointerPosition(
-      "mouse",
       e.clientX,
       e.clientY,
       null,
@@ -306,7 +171,7 @@ class WebGLFluidCursor {
   }
 
   _onMouseDown(e, id = "default") {
-    const pointer = this._getOrCreatePointer("mouse", id);
+    const pointer = this._getOrCreatePointer(id);
     const posX = this._scaleByPixelRatio(e.clientX);
     const posY = this._scaleByPixelRatio(e.clientY);
     this._updatePointerDownData(pointer, -1, posX, posY);
@@ -1374,27 +1239,27 @@ class WebGLFluidCursor {
   }
 
   // ----- Pointer helpers -----
-  _pointerKey(type, id = "default") {
-    return `${type}:${id}`;
+  _pointerKey(id = "default") {
+    return `mouse:${id}`;
   }
 
-  _registerPointer(type, id = "default", color = null) {
-    const key = this._pointerKey(type, id);
+  _registerPointer(id = "default", color = null) {
+    const key = this._pointerKey(id);
     if (this.pointerMap.has(key)) return this.pointerMap.get(key);
-    const p = this._createPointer(type, id);
+    const p = this._createPointer("mouse", id);
     if (Array.isArray(color)) p.color = color;
     this.pointers.push(p);
     this.pointerMap.set(key, p);
     return p;
   }
 
-  _getOrCreatePointer(type, id = "default", color = null) {
-    const key = this._pointerKey(type, id);
-    return this.pointerMap.get(key) ?? this._registerPointer(type, id, color);
+  _getOrCreatePointer(id = "default", color = null) {
+    const key = this._pointerKey(id);
+    return this.pointerMap.get(key) ?? this._registerPointer(id, color);
   }
 
-  _removePointer(type, id = "default") {
-    const key = this._pointerKey(type, id);
+  _removePointer(id = "default") {
+    const key = this._pointerKey(id);
     const p = this.pointerMap.get(key);
     if (!p) return false;
     this.pointerMap.delete(key);
@@ -1404,16 +1269,16 @@ class WebGLFluidCursor {
 
   // Public API
   // add in WebGLFluidCursor public API
-  addPointer(type, id = "default", color = null) {
-    return this._registerPointer(type, id, color);
+  addPointer(id = "default", color = null) {
+    return this._registerPointer(id, color);
   }
-  removePointer(type, id = "default") {
-    return this._removePointer(type, id);
+  removePointer(id = "default") {
+    return this._removePointer(id);
   }
-  updatePointer(type, id, x, y, color = null) {
-    this.inputManager.updatePointerPosition(type, x, y, color, id);
+  updatePointer(id, x, y, color = null) {
+    this.inputManager.updatePointerPosition(x, y, color, id);
   }
   onEyeGazeMoveFor(id, x, y, color = null) {
-    this.inputManager.updatePointerPosition("eye-gaze", x, y, color, id);
+    this.inputManager.updatePointerPosition(x, y, color, id);
   }
 }

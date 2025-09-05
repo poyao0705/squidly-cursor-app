@@ -17,7 +17,6 @@ document.addEventListener("DOMContentLoaded", () => {
   document.addEventListener("mousemove", (e) => {
     // Create fluid trails on movement
     fluidCursor.inputManager.updatePointerPosition(
-      "mouse",
       e.clientX,
       e.clientY
     );
@@ -46,9 +45,15 @@ document.addEventListener("DOMContentLoaded", () => {
     // console.log('message received from app.js', event);
 
     if (event.data && event.data.mode === "eye-gaze") {
-      const { x, y, bbox, hidden } = event.data;
+      const { user, x, y, bbox, hidden, source } = event.data;
 
-      if (!hidden) {
+      // Use user field as the pointer ID to distinguish between different eye gaze sources
+      const pointerId = user || "default";
+
+      if (hidden) {
+        // Remove the pointer when hidden
+        fluidCursor.removePointer(pointerId);
+      } else {
         // Check if we're in an iframe
         const iframe = window.frameElement;
         let eyeGazeX, eyeGazeY;
@@ -64,11 +69,13 @@ document.addEventListener("DOMContentLoaded", () => {
         eyeGazeX = eyeGazeX_screen;
         eyeGazeY = eyeGazeY_screen;
 
-        // Use eye gaze exactly like mouse cursor (use mouse input strategy)
+        // Use eye gaze exactly like mouse cursor
+        // But with different pointer IDs for multiple users
         fluidCursor.inputManager.updatePointerPosition(
-          "mouse",
           eyeGazeX,
-          eyeGazeY
+          eyeGazeY,
+          null, // Let system generate colors dynamically
+          pointerId
         );
       }
     }
