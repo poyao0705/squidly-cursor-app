@@ -1,17 +1,17 @@
-/* ballpit-cursor.js
-   Transparent, pointer-events:none THREE.js "ballpit" cursor overlay (vanilla JS)
-   - Same external API shape as fluid-cursor.js:
-       new WebGLBallpitCursor({ configOverrides, autoMouseEvents })
-       .inputManager.updatePointerPosition(x, y, color?, id?)
-   - No bundler required. Dynamically imports THREE module from CDN.
-*/
-(() => {
-    // Dynamically import THREE as an ES module even though *this* file is a classic script.
-    const threeCdn = "https://cdn.jsdelivr.net/npm/three@0.179.1/build/three.module.js";
-  
-    // InputManager is now loaded from external script
-  
-    class WebGLBallpitCursor {
+/**
+ * WebGL Ballpit Cursor
+ * Transparent, pointer-events:none THREE.js "ballpit" cursor overlay
+ * - Same external API shape as fluid-cursor.js
+ * - No bundler required. Dynamically imports THREE module from CDN.
+ */
+
+// Import InputManager
+import InputManager from './input-manager.js';
+
+// Dynamically import THREE as an ES module
+const threeCdn = "https://cdn.jsdelivr.net/npm/three@0.179.1/build/three.module.js";
+
+class WebGLBallpitCursor {
       constructor({ configOverrides = {}, autoMouseEvents = false } = {}) {
         this.THREE = null; // filled after import
         this.ready = false;
@@ -467,14 +467,16 @@
       }
     }
   
-    // Expose constructor on window after THREE loads
-    // We attach immediately so app.js can `new WebGLBallpitCursor(...)` right away.
-    Object.defineProperty(window, "WebGLBallpitCursor", {
-      configurable: true,
-      enumerable: false,
-      get() {
-        return WebGLBallpitCursor;
-      }
-    });
-  })();
+// Export for different module systems
+if (typeof module !== 'undefined' && module.exports) {
+  module.exports = WebGLBallpitCursor;
+}
+
+if (typeof window !== 'undefined') {
+  window.WebGLBallpitCursor = WebGLBallpitCursor;
+}
+
+// ES6 module export
+export default WebGLBallpitCursor;
+export { WebGLBallpitCursor };
   

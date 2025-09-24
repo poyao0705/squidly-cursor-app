@@ -1,10 +1,11 @@
-// dropin-fluid-cursor.js
-// Transparent, pointer-events:none canvas overlay that renders a fluid trail
-// Works with external input sources (eye-gaze, manual splashes, etc.)
+/**
+ * WebGL Fluid Cursor
+ * Transparent, pointer-events:none canvas overlay that renders a fluid trail
+ * Works with external input sources (eye-gaze, manual splashes, etc.)
+ */
 
-// === Simplified Input Manager ================================================
-
-// InputManager is now loaded from external script
+// Import InputManager
+import InputManager from './input-manager.js';
 
 class WebGLFluidCursor {
   /**
@@ -1266,4 +1267,15 @@ class WebGLFluidCursor {
   }
 }
 
-// WebGLFluidCursor is now available globally
+// Export for different module systems
+if (typeof module !== 'undefined' && module.exports) {
+  module.exports = WebGLFluidCursor;
+}
+
+if (typeof window !== 'undefined') {
+  window.WebGLFluidCursor = WebGLFluidCursor;
+}
+
+// ES6 module export
+export default WebGLFluidCursor;
+export { WebGLFluidCursor };

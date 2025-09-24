@@ -1,15 +1,8 @@
+// Import cursor effects
+import { WebGLFluidCursor, WebGLBallpitCursor } from './index.js';
+
 document.addEventListener("DOMContentLoaded", () => {
-  // let fluidCursor = new WebGLFluidCursor({
-  //   configOverrides: {
-  //     SPLAT_RADIUS: 0.2,
-  //     // SPLAT_FORCE: 6000,
-  //     SPLAT_FORCE: 6000,
-  //     COLOR_UPDATE_SPEED: 5,
-  //     DENSITY_DISSIPATION: 0.5,
-  //     VELOCITY_DISSIPATION: 1.5,
-  //   },
-  //   autoMouseEvents: false,
-  // });
+  // Initialize ballpit cursor
   let ballpit = new WebGLBallpitCursor({
     configOverrides: {
       // COUNT: 15, // Use default from ballpit-cursor.js
@@ -17,6 +10,18 @@ document.addEventListener("DOMContentLoaded", () => {
     },
     autoMouseEvents: false, // keep false since you already attach your own handlers
   });
+
+  // Alternative: Initialize fluid cursor
+  // let fluidCursor = new WebGLFluidCursor({
+  //   configOverrides: {
+  //     SPLAT_RADIUS: 0.2,
+  //     SPLAT_FORCE: 6000,
+  //     COLOR_UPDATE_SPEED: 5,
+  //     DENSITY_DISSIPATION: 0.5,
+  //     VELOCITY_DISSIPATION: 1.5,
+  //   },
+  //   autoMouseEvents: false,
+  // });
 
   document.addEventListener("mousemove", (e) => {
     ballpit.inputManager.updatePointerPosition(e.clientX, e.clientY, null, "mouse");

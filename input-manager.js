@@ -341,3 +341,7 @@ if (typeof module !== 'undefined' && module.exports) {
   // Make available globally
   window.InputManager = InputManager;
 }
+
+// ES6 module export
+export default InputManager;
+export { InputManager };
