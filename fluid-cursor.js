@@ -43,7 +43,9 @@ class WebGLFluidCursor {
    * });
    */
   constructor({ configOverrides = {}, autoMouseEvents = false, onReady = null } = {}) {
+    /** @type {Function|null} Callback function called when cursor is ready */
     this.onReady = onReady;
+    
     /** @type {HTMLCanvasElement|null} The WebGL canvas element */
     this.canvas = null;
     
