@@ -42,7 +42,8 @@ class WebGLFluidCursor {
    *   autoMouseEvents: true
    * });
    */
-  constructor({ configOverrides = {}, autoMouseEvents = false } = {}) {
+  constructor({ configOverrides = {}, autoMouseEvents = false, onReady = null } = {}) {
+    this.onReady = onReady;
     /** @type {HTMLCanvasElement|null} The WebGL canvas element */
     this.canvas = null;
     
@@ -155,10 +156,11 @@ class WebGLFluidCursor {
     // console.log("Canvas dimensions:", this.canvas.width, this.canvas.height);
     // console.log("Canvas style:", this.canvas.style.cssText);
     
-    // Small delay to ensure mouse pointer is properly initialized
-    setTimeout(() => {
-      this._updateFrame();
-    }, 16); // ~1 frame delay
+    // Start frame loop immediately and signal readiness
+    this._updateFrame();
+    if (typeof this.onReady === "function") {
+      try { this.onReady(this); } catch (e) { console.warn("onReady callback error", e); }
+    }
   }
 
   // === Public API ==========================================================

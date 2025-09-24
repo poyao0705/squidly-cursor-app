@@ -82,7 +82,7 @@ window.cursorApp = {
     if (this.switching) return; // Prevent rapid switching
     this.switching = true;
     
-    this.destroyCurrentCursor().then(() => {
+    Promise.resolve(this.destroyCurrentCursor()).then(() => {
       this.currentCursor = new WebGLBallpitCursor({
         configOverrides: {
           // Using default configuration from ballpit-cursor.js
@@ -109,7 +109,7 @@ window.cursorApp = {
     if (this.switching) return; // Prevent rapid switching
     this.switching = true;
     
-    this.destroyCurrentCursor().then(() => {
+    Promise.resolve(this.destroyCurrentCursor()).then(() => {
       this.currentCursor = new WebGLFluidCursor({
         configOverrides: {
           SPLAT_RADIUS: 0.2,        // Size of fluid splashes
@@ -119,17 +119,17 @@ window.cursorApp = {
           VELOCITY_DISSIPATION: 1.5, // How quickly velocity fades
         },
         autoMouseEvents: false, // Use unified input system
+        onReady: (fc) => {
+          if (fc.splashAtClient) {
+            const cx = window.innerWidth / 2;
+            const cy = window.innerHeight / 2;
+            fc.splashAtClient(cx, cy, [0.5, 0.5, 0.5], "mouse");
+          }
+        },
       });
       this.setCursorType("fluid");
       this.switching = false;
       console.log("🌊 Switched to Fluid Cursor");
-      
-      // Create an initial splash to kickstart the fluid effect
-      setTimeout(() => {
-        if (this.currentCursor.splashAtClient) {
-          this.currentCursor.splashAtClient(400, 300, [0.5, 0.5, 0.5], "mouse");
-        }
-      }, 100);
     });
   },
   
@@ -147,15 +147,9 @@ window.cursorApp = {
     if (this.currentCursor && this.currentCursor.destroy) {
       this.currentCursor.destroy();
       // Add a small delay to ensure cleanup is complete
-      return new Promise(resolve => {
-        setTimeout(() => {
-          this.currentCursor = null;
-          resolve();
-        }, 50); // 50ms delay for cleanup
-      });
+      this.currentCursor = null;
+      return Promise.resolve();
     }
-    this.currentCursor = null;
-    return Promise.resolve();
   },
   
   /**
@@ -175,25 +169,7 @@ window.cursorApp = {
       return;
     }
     
-    // Safety check for undefined coordinates
-    if (x === undefined || y === undefined || x === null || y === null) {
-      console.warn("Invalid coordinates passed to updatePointerPosition:", x, y);
-      return;
-    }
-    
-    // Additional safety check for fluid cursor
-    if (this.currentType === "fluid" && !this.currentCursor.canvas) {
-      console.warn("Fluid cursor canvas is null, skipping pointer update");
-      return;
-    }
-    
-    if (this.currentType === "ballpit") {
-      // Ballpit cursor uses "default" as fallback user ID
-      this.currentCursor.inputManager.updatePointerPosition(x, y, color, userId || "default");
-    } else if (this.currentType === "fluid") {
-      // Fluid cursor uses "mouse" as fallback user ID for proper pointer management
-      this.currentCursor.inputManager.updatePointerPosition(x, y, color, userId || "mouse");
-    }
+    this.currentCursor.inputManager.updatePointerPosition(x, y, color, userId || "mouse");
   },
   
 };
