@@ -5,11 +5,6 @@ body {
     background: #000; 
 }
 
-#container { 
-    width: 100vw; 
-    height: 100vh; 
-}
-
 #instruction-text {
     position: fixed;
     top: 50%;

@@ -4,35 +4,14 @@
 
 // === Simplified Input Manager ================================================
 
-/**
- * Manages pointer input - all pointers use mouse strategy
- */
-class InputManager {
-  constructor(fluidCursor) {
-    this.fluidCursor = fluidCursor;
-  }
-
-  updatePointerPosition(x, y, color = null, id = "default") {
-    // All pointers use mouse strategy
-    const p = this.fluidCursor._getOrCreatePointer(id, color);
-    const posX = this.fluidCursor._scaleByPixelRatio(x);
-    const posY = this.fluidCursor._scaleByPixelRatio(y);
-    this.fluidCursor._updatePointerMoveData(p, posX, posY, color || p.color);
-  }
-}
+// InputManager is now loaded from external script
 
 class WebGLFluidCursor {
   /**
    * @param {Object} opts
-   * @param {HTMLElement} opts.container - host element to overlay the canvas
    * @param {Object} [opts.configOverrides={}] - override simulation config
    */
-  constructor({ container, configOverrides = {}, autoMouseEvents = false } = {}) {
-    if (!container || !(container instanceof HTMLElement)) {
-      throw new Error("WebGLFluidCursor: 'container' must be an HTMLElement");
-    }
-
-    this.container = container;
+  constructor({ configOverrides = {}, autoMouseEvents = false } = {}) {
 
     // internal state
     this.canvas = null;
@@ -45,8 +24,12 @@ class WebGLFluidCursor {
     // Register default mouse pointer
     this._registerPointer("default", "#00ff88");
 
-    // Simplified input manager
-    this.inputManager = new InputManager(this);
+    // Input manager - uses external InputManager
+    this.inputManager = new InputManager(this, {
+      cursorType: 'fluid',
+      useBallAssignment: false,
+      inactiveTimeout: 5000
+    });
 
     // default config
     this.config = Object.assign(
@@ -1282,3 +1265,5 @@ class WebGLFluidCursor {
     this.inputManager.updatePointerPosition(x, y, color, id);
   }
 }
+
+// WebGLFluidCursor is now available globally
