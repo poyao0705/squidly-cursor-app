@@ -1,8 +1,21 @@
 /**
  * WebGL Ballpit Cursor
- * Transparent, pointer-events:none THREE.js "ballpit" cursor overlay
- * - Same external API shape as fluid-cursor.js
- * - No bundler required. Dynamically imports THREE module from CDN.
+ * 
+ * A THREE.js-based interactive ball physics simulation that creates a "ballpit"
+ * effect with realistic ball physics, gravity, and collision detection.
+ * Each user gets their own ball that follows their cursor movement.
+ * 
+ * Features:
+ * - Real-time 3D ball physics with THREE.js
+ * - Multi-user support with individual ball assignment
+ * - Configurable physics properties (gravity, friction, bounce)
+ * - Automatic canvas positioning and iframe support
+ * - Resource management and cleanup
+ * - Dynamic ball assignment for eye gaze users
+ * 
+ * @author Squidly Team
+ * @version 1.0.0
+ * @class WebGLBallpitCursor
  */
 
 // Import InputManager
@@ -12,38 +25,64 @@ import InputManager from './input-manager.js';
 const threeCdn = "https://cdn.jsdelivr.net/npm/three@0.179.1/build/three.module.js";
 
 class WebGLBallpitCursor {
-      constructor({ configOverrides = {}, autoMouseEvents = false } = {}) {
-        this.THREE = null; // filled after import
-        this.ready = false;
+  /**
+   * Create a new WebGLBallpitCursor instance
+   * 
+   * @param {Object} [opts={}] - Configuration options
+   * @param {Object} [opts.configOverrides={}] - Override physics configuration
+   * @param {boolean} [opts.autoMouseEvents=false] - Whether to automatically handle mouse events
+   * 
+   * @example
+   * // Basic usage
+   * const ballpit = new WebGLBallpitCursor();
+   * 
+   * // With custom physics
+   * const ballpit = new WebGLBallpitCursor({
+   *   configOverrides: {
+   *     COUNT: 100,
+   *     GRAVITY: 0.05,
+   *     FRICTION: 0.99
+   *   },
+   *   autoMouseEvents: true
+   * });
+   */
+  constructor({ configOverrides = {}, autoMouseEvents = false } = {}) {
+    /** @type {Object|null} THREE.js library instance */
+    this.THREE = null;
+    
+    /** @type {boolean} Whether the cursor is ready for use */
+    this.ready = false;
   
-        // Public API - InputManager handles all pointer logic
-        this.inputManager = new InputManager(this, {
-          cursorType: 'ballpit',
-          useBallAssignment: true,
-          inactiveTimeout: 5000
-        });
+    /** @type {Object} Input manager for handling multiple input sources */
+    this.inputManager = new InputManager(this, {
+      cursorType: 'ballpit',
+      useBallAssignment: true,
+      inactiveTimeout: 5000
+    });
 
-        // Default config (can be overridden)
-        this.config = Object.assign(
-          {
-            COUNT: 50,
-            MIN_SIZE: 0.6,
-            MAX_SIZE: 1.2,
-            GRAVITY: 0.02,
-            FRICTION: 0.998,
-            WALL_BOUNCE: 0.95,
-            MAX_VEL: 0.2,
-            FOLLOW_CURSOR: true,
-            LIGHT_INTENSITY: 750,
-            AMBIENT_COLOR: 0xffffff,
-            AMBIENT_INTENSITY: 1.05,
-            LEADER_EASE: 0.3,
-            PAUSED: false,
-            // vibrant colorful palette with white balls
-            PALETTE: [0xff6b6b, 0x4ecdc4, 0x45b7d1, 0x96ceb4, 0xfeca57, 0xff9ff3, 0x54a0ff, 0x5f27cd, 0x00d2d3, 0xff9f43, 0xee5a24, 0x0abde3, 0x006ba6, 0x8338ec, 0x3a86ff, 0xffffff, 0xf8f9fa, 0xe9ecef, 0xffffff]
-          },
-          configOverrides || {}
-        );
+    /** @type {Object} Physics and rendering configuration */
+    this.config = Object.assign(
+      {
+        COUNT: 50,                    // Number of balls in the simulation
+        MIN_SIZE: 0.6,               // Minimum ball size (0.1-2.0)
+        MAX_SIZE: 1.2,               // Maximum ball size (0.5-3.0)
+        GRAVITY: 0.02,               // Gravity strength (0.01-0.1)
+        FRICTION: 0.998,             // Air resistance (0.9-0.999)
+        WALL_BOUNCE: 0.95,           // Bounce factor for walls (0.1-1.0)
+        MAX_VEL: 0.2,                // Maximum ball velocity
+        FOLLOW_CURSOR: true,         // Whether balls follow cursor movement
+        LIGHT_INTENSITY: 750,        // Light intensity for rendering
+        AMBIENT_COLOR: 0xffffff,     // Ambient light color
+        AMBIENT_INTENSITY: 1.05,     // Ambient light intensity
+        LEADER_EASE: 0.3,            // Easing factor for cursor following
+        PAUSED: false,               // Pause simulation
+        // Colorful ball palette
+        PALETTE: [0xff6b6b, 0x4ecdc4, 0x45b7d1, 0x96ceb4, 0xfeca57, 0xff9ff3, 
+                 0x54a0ff, 0x5f27cd, 0x00d2d3, 0xff9f43, 0xee5a24, 0x0abde3, 
+                 0x006ba6, 0x8338ec, 0x3a86ff, 0xffffff, 0xf8f9fa, 0xe9ecef, 0xffffff]
+      },
+      configOverrides || {}
+    );
   
         // Canvas overlay
         this.canvas = document.createElement("canvas");
@@ -69,13 +108,50 @@ class WebGLBallpitCursor {
         });
       }
   
-      // ---------- Public helpers (optional parity with fluid cursor) ----------
+      // ---------- Public API ----------
+      
+      /**
+       * Pause the ball physics simulation
+       * 
+       * Stops the physics update loop while keeping the rendering active.
+       * Balls will remain in their current positions.
+       * 
+       * @example
+       * ballpit.pause();
+       * 
+       * @public
+       */
       pause() {
         this.config.PAUSED = true;
       }
+      
+      /**
+       * Resume the ball physics simulation
+       * 
+       * Restarts the physics update loop from where it was paused.
+       * 
+       * @example
+       * ballpit.play();
+       * 
+       * @public
+       */
       play() {
         this.config.PAUSED = false;
       }
+      
+      /**
+       * Destroy the ballpit cursor and clean up all resources
+       * 
+       * Safely destroys the THREE.js scene, removes event listeners, clears
+       * all physics data, and removes the canvas from the DOM. Should be called
+       * when the cursor is no longer needed to prevent memory leaks.
+       * 
+       * @example
+       * // Clean up when switching to another cursor
+       * ballpit.destroy();
+       * 
+       * @public
+       */
       destroy() {
         cancelAnimationFrame(this._raf);
         window.removeEventListener("resize", this._onResize);

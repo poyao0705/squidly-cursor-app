@@ -1,33 +1,53 @@
-/* input-manager.js
-   Unified InputManager for both Fluid Cursor and Ballpit Cursor
-   - Handles multiple pointer inputs (mouse, eyegaze, etc.)
-   - Supports dynamic ball assignment for multi-user scenarios
-   - Provides input prioritization (mouse over eyegaze)
-   - Automatic cleanup of inactive users
-   - Compatible with both cursor implementations
-*/
-
+/**
+ * Unified Input Manager for WebGL Cursor Effects
+ * 
+ * This module provides a unified input management system for both WebGL-based cursor effects:
+ * - Fluid Cursor: WebGL fluid simulation with pointer tracking
+ * - Ballpit Cursor: Interactive ball physics with multi-user support
+ * 
+ * Features:
+ * - Multi-pointer input handling (mouse, eye gaze, etc.)
+ * - Dynamic ball assignment for multi-user scenarios
+ * - Input prioritization (mouse over eye gaze)
+ * - Automatic cleanup of inactive users
+ * - Cross-cursor compatibility and unified API
+ * 
+ * @author Squidly Team
+ * @version 1.0.0
+ * @class InputManager
+ */
 class InputManager {
+  /**
+   * Create a new InputManager instance
+   * 
+   * @param {Object} owner - The cursor instance that owns this InputManager
+   * @param {Object} [options={}] - Configuration options
+   * @param {string} [options.cursorType='fluid'] - Type of cursor ('fluid' or 'ballpit')
+   * @param {boolean} [options.useBallAssignment=false] - Whether to use ball assignment for eye gaze users
+   * @param {number} [options.inactiveTimeout=5000] - Timeout for inactive users in milliseconds
+   */
   constructor(owner, options = {}) {
+    /** @type {Object} The cursor instance that owns this InputManager */
     this.owner = owner;
+    
+    /** @type {Object} Configuration options */
     this.options = {
-      // Cursor type: 'fluid' or 'ballpit'
       cursorType: options.cursorType || 'fluid',
-      // Whether to use ball assignment for eyegaze users
       useBallAssignment: options.useBallAssignment || false,
-      // Default timeout for inactive users (ms)
       inactiveTimeout: options.inactiveTimeout || 5000,
       ...options
     };
 
-    // Internal pointer storage
+    /** @type {Map<string, Object>} Internal pointer storage */
     this._pointers = new Map();
     
-    // Ball assignment system (for ballpit cursor)
+    /** @type {Map<string, number>} Ball assignment system for ballpit cursor */
     this._eyegazeBallIndices = new Map(); // userType -> ballIndex
-    this._nextAvailableBallIndex = 1; // Start from 1 (0 is reserved for mouse)
     
-    // Statistics
+    /** @type {number} Next available ball index (0 reserved for mouse) */
+    this._nextAvailableBallIndex = 1;
+    
+    /** @type {Object} Performance and usage statistics */
     this._stats = {
       totalUpdates: 0,
       lastCleanup: performance.now()
@@ -35,13 +55,23 @@ class InputManager {
   }
 
   /**
-   * Update pointer position - main entry point
-   * @param {number} x - X coordinate
-   * @param {number} y - Y coordinate  
-   * @param {Array|string|null} color - Color for the pointer
-   * @param {string} id - Pointer ID (default: "default")
+   * Update pointer position for the specified user/pointer
+   * 
+   * This is the main entry point for all pointer input. It handles both fluid and ballpit
+   * cursor types, manages pointer lifecycle, and delegates to appropriate handlers.
+   * 
+   * @param {number} x - X coordinate of the pointer
+   * @param {number} y - Y coordinate of the pointer
+   * @param {Array|string|null} [color=null] - Color for the pointer effect
+   * @param {string} [id="default"] - Unique identifier for the pointer/user
    */
   updatePointerPosition(x, y, color = null, id = "default") {
+    // Safety check for undefined coordinates
+    if (x === undefined || y === undefined || x === null || y === null) {
+      console.warn("InputManager: Invalid coordinates received:", x, y, "for user:", id);
+      return;
+    }
+    
     const pointer = this._getOrCreatePointer(id, color);
     
     // Update pointer data
@@ -65,7 +95,12 @@ class InputManager {
   }
 
   /**
-   * Handle input for ballpit cursor
+   * Handle input for ballpit cursor type
+   * 
+   * Processes pointer input for ballpit cursor. Handles ball assignment for eye gaze users
+   * when ball assignment is enabled.
+   * 
+   * @param {Object} pointer - The pointer object to process
    * @private
    */
   _handleBallpitInput(pointer) {
@@ -79,20 +114,41 @@ class InputManager {
   }
 
   /**
-   * Handle input for fluid cursor
+   * Handle input for fluid cursor type
+   * 
+   * Processes pointer input for WebGL fluid simulation. Scales coordinates by pixel ratio,
+   * updates pointer data, and ensures proper pointer management for fluid effects.
+   * 
+   * @param {Object} pointer - The pointer object to process
    * @private
    */
   _handleFluidInput(pointer) {
-    // For fluid cursor, we need to scale coordinates and update move data
-    if (this.owner._scaleByPixelRatio && this.owner._updatePointerMoveData) {
+    // Safety check - ensure owner and canvas exist
+    if (!this.owner || !this.owner.canvas) {
+      console.warn("Owner or canvas is null in _handleFluidInput, skipping update");
+      return;
+    }
+    
+    if (this.owner._scaleByPixelRatio && this.owner._updatePointerMoveData && this.owner._getOrCreatePointer) {
       const posX = this.owner._scaleByPixelRatio(pointer.x);
       const posY = this.owner._scaleByPixelRatio(pointer.y);
-      this.owner._updatePointerMoveData(pointer, posX, posY, pointer.color);
+      
+      // make sure we're updating the cursor's pointer, not our internal clone
+      const ownerPtr = this.owner._getOrCreatePointer(pointer.id || "default", pointer.color);
+      this.owner._updatePointerMoveData(ownerPtr, posX, posY, pointer.color);
+      ownerPtr.moved = true; // ensure a splat this frame
     }
   }
 
   /**
-   * Get or create a pointer
+   * Get or create a pointer object for the specified ID
+   * 
+   * Creates a new pointer if one doesn't exist, or returns the existing one.
+   * Handles color assignment and pointer initialization.
+   * 
+   * @param {string} id - Unique identifier for the pointer
+   * @param {Array|string|null} [color=null] - Color for the pointer
+   * @returns {Object} The pointer object
    * @private
    */
   _getOrCreatePointer(id, color = null) {
@@ -110,7 +166,12 @@ class InputManager {
   }
 
   /**
-   * Assign ball index to eyegaze user
+   * Assign a unique ball index for eye gaze users
+   * 
+   * Assigns a unique ball index to eye gaze users for the ballpit cursor.
+   * This allows multiple eye gaze users to have their own balls in the simulation.
+   * 
+   * @param {string} userType - The user type identifier
    * @private
    */
   _assignBallIndex(userType) {
@@ -125,7 +186,12 @@ class InputManager {
   }
 
   /**
-   * Release ball index from user
+   * Release ball index from user and clean up pointer
+   * 
+   * Removes the ball index assignment and deletes the pointer from storage.
+   * Used when a user becomes inactive or disconnects.
+   * 
+   * @param {string} userType - The user type identifier to release
    * @private
    */
   _releaseBallIndex(userType) {
@@ -141,7 +207,12 @@ class InputManager {
 
   /**
    * Get all active pointers
-   * @returns {Array} Array of pointer objects
+   * 
+   * Returns a copy of all currently active pointers with their current state.
+   * Useful for debugging and external monitoring.
+   * 
+   * @returns {Array<Object>} Array of pointer objects with current state
+   * @public
    */
   getActivePointers() {
     return Array.from(this._pointers.entries()).map(([id, pointer]) => ({
@@ -155,8 +226,13 @@ class InputManager {
   }
 
   /**
-   * Get target pointer (prioritizes mouse)
-   * @returns {Object|null} Target pointer or null
+   * Get the target pointer with input prioritization
+   * 
+   * Returns the most appropriate pointer to use for cursor effects.
+   * Prioritizes mouse input over eye gaze input.
+   * 
+   * @returns {Object|null} Target pointer object or null if no active pointers
+   * @public
    */
   getTargetPointer() {
     // First try to use mouse input
@@ -177,35 +253,51 @@ class InputManager {
   }
 
   /**
-   * Get eyegaze ball indices
-   * @returns {Map} Map of userType -> ballIndex
+   * Get eye gaze ball indices mapping
+   * 
+   * Returns a copy of the current ball index assignments for eye gaze users.
+   * Useful for debugging and external monitoring of ball assignments.
+   * 
+   * @returns {Map<string, number>} Map of userType -> ballIndex
+   * @public
    */
   getEyegazeBallIndices() {
     return new Map(this._eyegazeBallIndices);
   }
 
   /**
-   * Get pointer by ID
-   * @param {string} id - Pointer ID
-   * @returns {Object|null} Pointer object or null
+   * Get a specific pointer by its ID
+   * 
+   * Retrieves a pointer object by its unique identifier.
+   * Returns null if the pointer doesn't exist.
+   * 
+   * @param {string} id - The unique pointer identifier
+   * @returns {Object|null} Pointer object or null if not found
+   * @public
    */
   getPointer(id) {
     return this._pointers.get(id) || null;
   }
 
   /**
-   * Check if pointer exists
-   * @param {string} id - Pointer ID
-   * @returns {boolean} True if pointer exists
+   * Check if a pointer exists by its ID
+   * 
+   * @param {string} id - The unique pointer identifier to check
+   * @returns {boolean} True if pointer exists, false otherwise
+   * @public
    */
   hasPointer(id) {
     return this._pointers.has(id);
   }
 
   /**
-   * Remove specific pointer
-   * @param {string} id - Pointer ID
-   * @returns {boolean} True if removed
+   * Remove a specific pointer by its ID
+   * 
+   * Removes the pointer from storage and handles ball index cleanup if needed.
+   * 
+   * @param {string} id - The unique pointer identifier to remove
+   * @returns {boolean} True if pointer was removed, false if it didn't exist
+   * @public
    */
   removePointer(id) {
     if (this._pointers.has(id)) {
@@ -220,9 +312,14 @@ class InputManager {
   }
 
   /**
-   * Cleanup inactive users
-   * @param {number} timeoutMs - Timeout in milliseconds
+   * Clean up inactive users based on timeout
+   * 
+   * Removes users who haven't been active for the specified timeout period.
+   * Mouse users are never cleaned up automatically.
+   * 
+   * @param {number} [timeoutMs=null] - Timeout in milliseconds (uses default if null)
    * @returns {number} Number of users removed
+   * @public
    */
   cleanupInactiveUsers(timeoutMs = null) {
     const timeout = timeoutMs || this.options.inactiveTimeout;
@@ -254,7 +351,12 @@ class InputManager {
 
   /**
    * Clear all non-mouse pointers
+   * 
+   * Removes all pointers except for the mouse pointer. Useful for cleanup
+   * when switching contexts or resetting the input state.
+   * 
    * @returns {number} Number of pointers removed
+   * @public
    */
   clearNonMousePointers() {
     let removed = 0;
@@ -279,8 +381,13 @@ class InputManager {
   }
 
   /**
-   * Get usage statistics
-   * @returns {Object} Statistics object
+   * Get usage statistics and performance metrics
+   * 
+   * Returns comprehensive statistics about the current state of the InputManager
+   * including active pointers, performance metrics, and system health.
+   * 
+   * @returns {Object} Statistics object with current state information
+   * @public
    */
   getStats() {
     const now = performance.now();
@@ -300,7 +407,11 @@ class InputManager {
   }
 
   /**
-   * Update statistics (call periodically)
+   * Update internal statistics timestamp
+   * 
+   * Updates the last cleanup timestamp for performance monitoring.
+   * Called internally during cleanup operations.
+   * 
    * @private
    */
   _updateStats() {
@@ -308,7 +419,12 @@ class InputManager {
   }
 
   /**
-   * Reset all data
+   * Reset all data and return to initial state
+   * 
+   * Clears all pointers, ball assignments, and statistics. Useful for
+   * complete system reset or when switching contexts.
+   * 
+   * @public
    */
   reset() {
     this._pointers.clear();
@@ -321,8 +437,13 @@ class InputManager {
   }
 
   /**
-   * Set cursor type and reconfigure
-   * @param {string} type - 'fluid' or 'ballpit'
+   * Set cursor type and reconfigure the InputManager
+   * 
+   * Updates the cursor type and automatically configures ball assignment
+   * based on the cursor type (enabled for ballpit, disabled for fluid).
+   * 
+   * @param {string} type - The cursor type ('fluid' or 'ballpit')
+   * @public
    */
   setCursorType(type) {
     this.options.cursorType = type;

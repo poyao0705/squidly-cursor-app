@@ -1,7 +1,20 @@
 /**
  * WebGL Fluid Cursor
- * Transparent, pointer-events:none canvas overlay that renders a fluid trail
- * Works with external input sources (eye-gaze, manual splashes, etc.)
+ * 
+ * A high-performance WebGL-based fluid simulation that creates realistic fluid trails
+ * following cursor movement. Uses advanced fluid dynamics algorithms including
+ * velocity advection, pressure projection, and vorticity confinement.
+ * 
+ * Features:
+ * - Real-time WebGL fluid simulation with custom shaders
+ * - Multi-pointer support for mouse, touch, and eye gaze input
+ * - Configurable fluid properties (density, velocity, pressure)
+ * - Automatic canvas positioning and iframe support
+ * - Resource management and cleanup
+ * 
+ * @author Squidly Team
+ * @version 1.0.0
+ * @class WebGLFluidCursor
  */
 
 // Import InputManager
@@ -9,50 +22,76 @@ import InputManager from './input-manager.js';
 
 class WebGLFluidCursor {
   /**
-   * @param {Object} opts
-   * @param {Object} [opts.configOverrides={}] - override simulation config
+   * Create a new WebGLFluidCursor instance
+   * 
+   * @param {Object} [opts={}] - Configuration options
+   * @param {Object} [opts.configOverrides={}] - Override simulation configuration
+   * @param {boolean} [opts.autoMouseEvents=false] - Whether to automatically handle mouse events
+   * 
+   * @example
+   * // Basic usage
+   * const fluidCursor = new WebGLFluidCursor();
+   * 
+   * // With custom configuration
+   * const fluidCursor = new WebGLFluidCursor({
+   *   configOverrides: {
+   *     SPLAT_RADIUS: 0.3,
+   *     SPLAT_FORCE: 8000,
+   *     COLOR_UPDATE_SPEED: 10
+   *   },
+   *   autoMouseEvents: true
+   * });
    */
   constructor({ configOverrides = {}, autoMouseEvents = false } = {}) {
-
-    // internal state
+    /** @type {HTMLCanvasElement|null} The WebGL canvas element */
     this.canvas = null;
+    
+    /** @type {WebGLRenderingContext|WebGL2RenderingContext|null} WebGL rendering context */
     this.gl = null;
+    
+    /** @type {Object|null} WebGL extensions and capabilities */
     this.ext = null;
+    
+    /** @type {number|null} Animation frame ID for cleanup */
     this.animationId = null;
-    // Pointer storage: array for the pipeline, plus a fast lookup map
+    
+    /** @type {Array<Object>} Array of active pointer objects */
     this.pointers = [];
-    this.pointerMap = new Map(); // key => pointer
-    // Register default mouse pointer
-    this._registerPointer("default", "#00ff88");
-
-    // Input manager - uses external InputManager
+    
+    /** @type {Map<string, Object>} Fast lookup map for pointers by ID */
+    this.pointerMap = new Map();
+    
+    /** @type {Object} Input manager for handling multiple input sources */
     this.inputManager = new InputManager(this, {
       cursorType: 'fluid',
       useBallAssignment: false,
       inactiveTimeout: 5000
     });
 
-    // default config
+    /** @type {Object} Simulation configuration with defaults */
     this.config = Object.assign(
       {
-        SIM_RESOLUTION: 128,
-        DYE_RESOLUTION: 1024,
-        CAPTURE_RESOLUTION: 512,
-        DENSITY_DISSIPATION: 1,
-        VELOCITY_DISSIPATION: 3,
-        PRESSURE: 0.1,
-        PRESSURE_ITERATIONS: 20,
-        CURL: 3,
-        SPLAT_RADIUS: 0.2,
-        SPLAT_FORCE: 6000,
-        SHADING: true,
-        COLOR_UPDATE_SPEED: 10,
-        BACK_COLOR: { r: 0, g: 0, b: 0 },
-        TRANSPARENT: true,
-        PAUSED: false,
+        SIM_RESOLUTION: 128,        // Simulation resolution (lower = better performance)
+        DYE_RESOLUTION: 1024,       // Dye resolution (higher = better quality)
+        CAPTURE_RESOLUTION: 512,    // Capture resolution for screenshots
+        DENSITY_DISSIPATION: 1,     // How quickly density fades (0.1-2.0)
+        VELOCITY_DISSIPATION: 3,    // How quickly velocity fades (0.1-5.0)
+        PRESSURE: 0.1,              // Pressure solver iterations
+        PRESSURE_ITERATIONS: 20,    // Number of pressure projection iterations
+        CURL: 3,                    // Vorticity confinement strength
+        SPLAT_RADIUS: 0.2,          // Size of fluid splashes (0.1-1.0)
+        SPLAT_FORCE: 6000,          // Force applied by splashes (1000-10000)
+        SHADING: true,              // Enable shading effects
+        COLOR_UPDATE_SPEED: 10,     // Speed of color transitions (1-20)
+        BACK_COLOR: { r: 0, g: 0, b: 0 }, // Background color
+        TRANSPARENT: true,          // Enable transparency
+        PAUSED: false,              // Pause simulation
       },
       configOverrides
     );
+
+    // Register default mouse pointer
+    this._registerPointer("mouse", "#00ff88");
 
     // framebuffers
     this.dye = null;
@@ -105,18 +144,42 @@ class WebGLFluidCursor {
         // Add mouse event listeners
         this._onMouseMove = this._onMouseMove.bind(this);
         this._onMouseDown = this._onMouseDown.bind(this);
-        this._onMouseUp = this._onMouseUp.bind(this);
+        // _onMouseUp is commented out, so skip binding and event listener
         window.addEventListener("mousemove", this._onMouseMove, { passive: true });
         window.addEventListener("mousedown", this._onMouseDown, { passive: true });
-        window.addEventListener("mouseup", this._onMouseUp, { passive: true });
+        // window.addEventListener("mouseup", this._onMouseUp, { passive: true });
     }
 
-    this._updateFrame();
+    // console.log("Fluid cursor constructor completed, starting animation loop");
+    // // console.log("Canvas:", this.canvas);
+    // console.log("Canvas dimensions:", this.canvas.width, this.canvas.height);
+    // console.log("Canvas style:", this.canvas.style.cssText);
+    
+    // Small delay to ensure mouse pointer is properly initialized
+    setTimeout(() => {
+      this._updateFrame();
+    }, 16); // ~1 frame delay
   }
 
   // === Public API ==========================================================
 
-  /** Manually create a splash at client pixel coordinates */
+  /**
+   * Manually create a splash at specific client pixel coordinates
+   * 
+   * Creates an immediate fluid splash effect at the specified coordinates.
+   * Useful for programmatic effects or initializing the fluid simulation.
+   * 
+   * @param {number} x - X coordinate in client pixels
+   * @param {number} y - Y coordinate in client pixels
+   * @param {Array<number>} [color=[0.5, 0.5, 0.5]] - RGB color array (0-1 range)
+   * @param {string} [id="default"] - Pointer ID for the splash
+   * 
+   * @example
+   * // Create a red splash at center of screen
+   * fluidCursor.splashAtClient(400, 300, [1, 0, 0], "splash");
+   * 
+   * @public
+   */
   splashAtClient(x, y, color = [0.5, 0.5, 0.5], id = "default") {
     const posX = this._scaleByPixelRatio(x);
     const posY = this._scaleByPixelRatio(y);
@@ -129,18 +192,52 @@ class WebGLFluidCursor {
     p.color = color;
   }
 
-  /** Destroy and cleanup */
+  /**
+   * Destroy the fluid cursor and clean up all resources
+   * 
+   * Safely destroys the WebGL context, removes event listeners, clears
+   * all pointers, and removes the canvas from the DOM. Should be called
+   * when the cursor is no longer needed to prevent memory leaks.
+   * 
+   * @example
+   * // Clean up when switching to another cursor
+   * fluidCursor.destroy();
+   * 
+   * @public
+   */
   destroy() {
-    if (this.animationId) cancelAnimationFrame(this.animationId);
+    console.log("Fluid cursor destroy called");
+    
+    // Stop animation first
+    if (this.animationId) {
+      cancelAnimationFrame(this.animationId);
+      this.animationId = null;
+    }
+    
+    // Remove event listeners
     window.removeEventListener("resize", this._onResize);
-    window.removeEventListener("mousemove", this._onMouseMove);
-    window.removeEventListener("mousedown", this._onMouseDown);
-    window.removeEventListener("mouseup", this._onMouseUp);
+    if (this._onMouseMove) window.removeEventListener("mousemove", this._onMouseMove);
+    if (this._onMouseDown) window.removeEventListener("mousedown", this._onMouseDown);
+    // _onMouseUp is commented out, so skip removal
+    // if (this._onMouseUp) window.removeEventListener("mouseup", this._onMouseUp);
+    
+    // Clear pointer maps before destroying canvas
+    this.pointers = [];
+    this.pointerMap.clear();
+    
+    // Clean up WebGL resources
+    if (this.gl) {
+      this.gl.clear(this.gl.COLOR_BUFFER_BIT | this.gl.DEPTH_BUFFER_BIT);
+      this.gl = null;
+    }
+    
+    // Remove canvas from DOM last
     if (this.canvas && this.canvas.parentElement) {
       this.canvas.parentElement.removeChild(this.canvas);
     }
     this.canvas = null;
-    this.gl = null;
+    
+    console.log("Fluid cursor destroyed");
   }
 
   // === Event handlers ======================================================
@@ -218,8 +315,10 @@ class WebGLFluidCursor {
     }
     
     // Don't modify the container's position - append to body instead
+    // console.log("Appending canvas to body:", c);
     document.body.appendChild(c);
     this.canvas = c;
+    // console.log("Canvas appended successfully");
   }
 
   _getWebGLContext(canvas) {
@@ -231,12 +330,17 @@ class WebGLFluidCursor {
       preserveDrawingBuffer: false,
       premultipliedAlpha: false,
     };
+    // console.log("Getting WebGL context for canvas:", canvas);
     let gl = canvas.getContext("webgl2", params);
     const isWebGL2 = !!gl;
-    if (!isWebGL2)
+    if (!isWebGL2) {
+      console.log("WebGL2 not available, trying WebGL1");
       gl =
         canvas.getContext("webgl", params) ||
         canvas.getContext("experimental-webgl", params);
+    }
+    // console.log("WebGL context obtained:", gl);
+    // console.log("WebGL version:", isWebGL2 ? "2" : "1");
 
     let halfFloat, supportLinearFiltering;
     if (isWebGL2) {
@@ -1106,6 +1210,12 @@ class WebGLFluidCursor {
   }
 
   _updatePointerMoveData(pointer, posX, posY, color) {
+    // Safety check - ensure canvas exists
+    if (!this.canvas) {
+      console.warn("Canvas is null in _updatePointerMoveData, skipping update");
+      return;
+    }
+    
     pointer.prevTexcoordX = pointer.texcoordX;
     pointer.prevTexcoordY = pointer.texcoordY;
     pointer.texcoordX = posX / this.canvas.width;
@@ -1116,8 +1226,12 @@ class WebGLFluidCursor {
     pointer.deltaY = this._correctDeltaY(
       pointer.texcoordY - pointer.prevTexcoordY
     );
-    pointer.moved =
-      Math.abs(pointer.deltaX) > 0.0 || Math.abs(pointer.deltaY) > 0.0;
+    
+    // Only update moved flag if it's not already set to true
+    // This preserves the moved flag set by InputManager
+    if (!pointer.moved) {
+      pointer.moved = Math.abs(pointer.deltaX) > 0.0 || Math.abs(pointer.deltaY) > 0.0;
+    }
     // pointer.color = color;
     pointer.color = color || pointer.color || this._generateColor();
   }
