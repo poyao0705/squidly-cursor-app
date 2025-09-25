@@ -41,33 +41,39 @@ window.cursorApp = {
    * @param {string} type - The cursor type to set ('ballpit' or 'fluid')
    * @memberof cursorApp
    */
-  setCursorType: function(type) {
+  setAppType: function(type) {
     if (this.currentType !== type) {
       this.currentType = type;
       // Set data attribute on body for app-base-api to observe
-      document.body.setAttribute('data-cursor-type', type);
+      document.body.setAttribute('app-type', type);
+      // Test: send message to parent
+      window.parent.postMessage({
+        mode: "app-type",
+        type: type
+      }, "*");
+      console.log("App type set to:", type);
       // Update UI
-      this.updateCursorUI(type);
+      // this.updateCursorUI(type);
     }
   },
   
   /**
-   * Update the UI to display the current cursor type
-   * 
-   * @param {string} type - The cursor type to display
-   * @memberof cursorApp
-   * @private
-   */
-  updateCursorUI: function(type) {
-    const cursorTypeElement = document.getElementById('cursor-type');
-    if (cursorTypeElement) {
-      if (type === 'ballpit') {
-        cursorTypeElement.textContent = '🎈 Ballpit Cursor';
-      } else if (type === 'fluid') {
-        cursorTypeElement.textContent = '🌊 Fluid Cursor';
-      }
-    }
-  },
+  //  * Update the UI to display the current cursor type
+  //  * 
+  //  * @param {string} type - The cursor type to display
+  //  * @memberof cursorApp
+  //  * @private
+  //  */
+  // updateCursorUI: function(type) {
+  //   const appTypeElement = document.getElementById('app-type');
+  //   if (appTypeElement) {
+  //     if (type === 'ballpit') {
+  //       appTypeElement.textContent = '🎈 Ballpit Cursor';
+  //     } else if (type === 'fluid') {
+  //       appTypeElement.textContent = '🌊 Fluid Cursor';
+  //     }
+  //   }
+  // },
   
   /**
    * Switch to ballpit cursor with interactive ball physics
@@ -90,7 +96,7 @@ window.cursorApp = {
         },
         autoMouseEvents: false, // Use unified input system
       });
-      this.setCursorType("ballpit");
+      this.setAppType("cursor-app/ballpit");
       this.switching = false;
       console.log("🎈 Switched to Ballpit Cursor");
     });
@@ -127,7 +133,7 @@ window.cursorApp = {
           }
         },
       });
-      this.setCursorType("fluid");
+      this.setAppType("cursor-app/fluid");
       this.switching = false;
       console.log("🌊 Switched to Fluid Cursor");
     });
@@ -196,7 +202,7 @@ document.addEventListener("DOMContentLoaded", () => {
     switch(e.key) {
       case " ": // Spacebar - Toggle between cursors
         e.preventDefault();
-        if (window.cursorApp.currentType === "ballpit") {
+        if (window.cursorApp.currentType === "cursor-app/ballpit") {
           window.cursorApp.switchToFluid();
         } else {
           window.cursorApp.switchToBallpit();
@@ -212,7 +218,7 @@ document.addEventListener("DOMContentLoaded", () => {
         break;
       case "Escape": // Escape - Toggle cursors (alternative)
         e.preventDefault();
-        if (window.cursorApp.currentType === "ballpit") {
+        if (window.cursorApp.currentType === "cursor-app/ballpit") {
           window.cursorApp.switchToFluid();
         } else {
           window.cursorApp.switchToBallpit();
