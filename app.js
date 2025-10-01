@@ -19,6 +19,15 @@
 import { WebGLFluidCursor, WebGLBallpitCursor } from './index.js';
 
 /**
+ * Map of cursor type strings to method names
+ * @constant
+ */
+const CURSOR_TYPE_METHODS = {
+  "cursor-app/ballpit": "switchToBallpit",
+  "cursor-app/fluid": "switchToFluid"
+};
+
+/**
  * Global cursor management object
  * Provides unified interface for managing cursor effects and input handling
  * 
@@ -35,6 +44,9 @@ window.cursorApp = {
   /** @type {boolean} Flag to prevent rapid cursor switching during transitions */
   switching: false,
   
+  /** @type {boolean} Flag to prevent message loop when syncing from parent */
+  syncingFromParent: false,
+  
   /**
    * Set the current cursor type and update UI/attributes
    * 
@@ -46,34 +58,20 @@ window.cursorApp = {
       this.currentType = type;
       // Set data attribute on body for app-base-api to observe
       document.body.setAttribute('app-type', type);
-      // Test: send message to parent
-      window.parent.postMessage({
-        mode: "app-type",
-        type: type
-      }, "*");
-      console.log("App type set to:", type);
-      // Update UI
-      // this.updateCursorUI(type);
+      
+      // Only send message to parent if we're not syncing (avoid infinite loop)
+      if (!this.syncingFromParent) {
+        window.parent.postMessage({
+          mode: "app_type",
+          type: type
+        }, "*");
+        // console.log("App type set to:", type, "(message sent to parent)");
+      } else {
+        // console.log("App type set to:", type, "(synced from parent, no message sent)");
+      }
     }
   },
-  
-  /**
-  //  * Update the UI to display the current cursor type
-  //  * 
-  //  * @param {string} type - The cursor type to display
-  //  * @memberof cursorApp
-  //  * @private
-  //  */
-  // updateCursorUI: function(type) {
-  //   const appTypeElement = document.getElementById('app-type');
-  //   if (appTypeElement) {
-  //     if (type === 'ballpit') {
-  //       appTypeElement.textContent = '🎈 Ballpit Cursor';
-  //     } else if (type === 'fluid') {
-  //       appTypeElement.textContent = '🌊 Fluid Cursor';
-  //     }
-  //   }
-  // },
+
   
   /**
    * Switch to ballpit cursor with interactive ball physics
@@ -98,7 +96,6 @@ window.cursorApp = {
       });
       this.setAppType("cursor-app/ballpit");
       this.switching = false;
-      console.log("🎈 Switched to Ballpit Cursor");
     });
   },
   
@@ -135,7 +132,6 @@ window.cursorApp = {
       });
       this.setAppType("cursor-app/fluid");
       this.switching = false;
-      console.log("🌊 Switched to Fluid Cursor");
     });
   },
   
@@ -227,10 +223,26 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   });
 
-  // Listen for eye gaze messages from SquidlyV3
+  // Listen for messages from SquidlyV3
   window.addEventListener("message", (event) => {
     if (!event.data) {
       return;
+    }
+
+    // Handle sync_app_type message from parent
+    if (event.data.mode === "sync_app_type") {
+      // Switch to the requested cursor type if different
+      if (event.data.type !== window.cursorApp.currentType) {
+        const methodName = CURSOR_TYPE_METHODS[event.data.type];
+        if (methodName && typeof window.cursorApp[methodName] === 'function') {
+          // Set flag to prevent sending message back to parent
+          window.cursorApp.syncingFromParent = true;
+          window.cursorApp[methodName]();
+          window.cursorApp.syncingFromParent = false;
+        } else {
+          console.warn("Unknown cursor type:", event.data.type);
+        }
+      }
     }
 
     // Safety check for valid coordinates in message
@@ -244,13 +256,4 @@ document.addEventListener("DOMContentLoaded", () => {
       );
     }
   });
-
-  // Display controls and status
-  console.log("🎮 Unified Cursor System Ready!");
-  console.log("🎮 Controls:");
-  console.log("  SPACEBAR or ESC - Toggle between cursors");
-  console.log("  1 - Switch to Ballpit Cursor");
-  console.log("  2 - Switch to Fluid Cursor");
-  console.log("  Move your mouse to see the effects!");
-  console.log(`🎯 Current cursor: ${window.cursorApp.currentType}`);
 });

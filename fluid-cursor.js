@@ -210,7 +210,7 @@ class WebGLFluidCursor {
    * @public
    */
   destroy() {
-    console.log("Fluid cursor destroy called");
+    // console.log("Fluid cursor destroy called");
     
     // Stop animation first
     if (this.animationId) {
@@ -241,7 +241,6 @@ class WebGLFluidCursor {
     }
     this.canvas = null;
     
-    console.log("Fluid cursor destroyed");
   }
 
   // === Event handlers ======================================================
