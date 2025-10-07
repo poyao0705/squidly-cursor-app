@@ -234,36 +234,6 @@ document.addEventListener("DOMContentLoaded", () => {
     window.cursorApp.updatePointerPosition(e.clientX, e.clientY, null, "mouse");
   });
 
-  // Keyboard controls for cursor switching
-  document.addEventListener("keydown", (e) => {
-    switch(e.key) {
-      case " ": // Spacebar - Toggle between cursors
-        e.preventDefault();
-        if (window.cursorApp.currentType === "cursor-app/ballpit") {
-          window.cursorApp.switchToFluid();
-        } else {
-          window.cursorApp.switchToBallpit();
-        }
-        break;
-      case "1": // Number 1 - Switch to ballpit
-        e.preventDefault();
-        window.cursorApp.switchToBallpit();
-        break;
-      case "2": // Number 2 - Switch to fluid
-        e.preventDefault();
-        window.cursorApp.switchToFluid();
-        break;
-      case "Escape": // Escape - Toggle cursors (alternative)
-        e.preventDefault();
-        if (window.cursorApp.currentType === "cursor-app/ballpit") {
-          window.cursorApp.switchToFluid();
-        } else {
-          window.cursorApp.switchToBallpit();
-        }
-        break;
-    }
-  });
-
   // Listen for messages from SquidlyV3
   window.addEventListener("message", (event) => {
     if (!event.data) {
@@ -287,11 +257,14 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     if (event.data.command === "switch_app") {
-      if (window.cursorApp.currentType === "cursor-app/ballpit") {
-        window.cursorApp.switchToFluid();
-      } else {
-        window.cursorApp.switchToBallpit();
-      }
+      // Cycle through available apps
+      const appTypes = Object.keys(CURSOR_TYPE_METHODS);
+      const currentIndex = appTypes.indexOf(window.cursorApp.currentType);
+      const nextIndex = (currentIndex + 1) % appTypes.length;
+      const nextAppType = appTypes[nextIndex];
+      
+      // Request switch using the requestCursorSwitch method
+      window.cursorApp.requestCursorSwitch(nextAppType);
     }
 
 
