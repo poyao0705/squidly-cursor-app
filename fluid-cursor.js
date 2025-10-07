@@ -19,6 +19,8 @@
 
 // Import InputManager
 import InputManager from './input-manager.js';
+import {GridIcon} from 'https://v3.squidly.com.au/src/Utilities/grid-icon.js';
+
 
 class WebGLFluidCursor {
   /**
@@ -70,6 +72,22 @@ class WebGLFluidCursor {
       useBallAssignment: false,
       inactiveTimeout: 5000
     });
+
+    // this.exitButton = new GridIcon({
+    //   symbol: "close",
+    //   displayValue: "Exit",
+    //   type: "action",
+    //   events: {
+    //     "access-click": () => this.destroy()
+    //   }
+    // }, "fluid-cursor");
+    // this.exitButton.styles = {
+    //   "width": "25vw",
+    //   "height": "25vh",
+    //   "display": "block",
+    //   "--shadow-color": "transparent",
+    // };
+    // document.body.appendChild(this.exitButton);
 
     /** @type {Object} Simulation configuration with defaults */
     this.config = Object.assign(

@@ -17,14 +17,13 @@
  */
 
 import { WebGLFluidCursor, WebGLBallpitCursor } from './index.js';
-
 /**
- * Map of cursor type strings to method names
+ * Map of cursor type strings to method names for actual switching (called by main app)
  * @constant
  */
 const CURSOR_TYPE_METHODS = {
-  "cursor-app/ballpit": "switchToBallpit",
-  "cursor-app/fluid": "switchToFluid"
+  "cursor-app/ballpit": "_switchToBallpit",
+  "cursor-app/fluid": "_switchToFluid"
 };
 
 /**
@@ -65,10 +64,26 @@ window.cursorApp = {
           mode: "app_type",
           type: type
         }, "*");
-        // console.log("App type set to:", type, "(message sent to parent)");
+        console.log("App type set to:", type, "(message sent to parent)");
       } else {
-        // console.log("App type set to:", type, "(synced from parent, no message sent)");
+        console.log("App type set to:", type, "(synced from parent, no message sent)");
       }
+    }
+  },
+
+  /**
+   * Send a cursor switch request to the main app
+   * 
+   * @param {string} cursorType - The cursor type to request ('cursor-app/ballpit' or 'cursor-app/fluid')
+   * @memberof cursorApp
+   */
+  requestCursorSwitch: function(cursorType) {
+    if (cursorType) {
+      window.parent.postMessage({
+        mode: "app_type",
+        type: cursorType
+      }, "*");
+      console.log("Requested cursor switch to:", cursorType);
     }
   },
 
@@ -83,20 +98,8 @@ window.cursorApp = {
    * @async
    */
   switchToBallpit: function() {
-    if (this.switching) return; // Prevent rapid switching
-    this.switching = true;
-    
-    Promise.resolve(this.destroyCurrentCursor()).then(() => {
-      this.currentCursor = new WebGLBallpitCursor({
-        configOverrides: {
-          // Using default configuration from ballpit-cursor.js
-          // Customize: COUNT, MIN_SIZE, MAX_SIZE, GRAVITY, etc.
-        },
-        autoMouseEvents: false, // Use unified input system
-      });
-      this.setAppType("cursor-app/ballpit");
-      this.switching = false;
-    });
+    // Only send request to main app, don't switch locally
+    this.requestCursorSwitch("cursor-app/ballpit");
   },
   
   /**
@@ -109,6 +112,42 @@ window.cursorApp = {
    * @async
    */
   switchToFluid: function() {
+    // Only send request to main app, don't switch locally
+    this.requestCursorSwitch("cursor-app/fluid");
+  },
+
+  /**
+   * Actually switch to ballpit cursor (called only by main app)
+   * 
+   * @memberof cursorApp
+   * @private
+   */
+  _switchToBallpit: function() {
+    if (this.switching) return; // Prevent rapid switching
+    this.switching = true;
+    
+    Promise.resolve(this.destroyCurrentCursor()).then(() => {
+      this.currentCursor = new WebGLBallpitCursor({
+        configOverrides: {
+          // Using default configuration from ballpit-cursor.js
+          // Customize: COUNT, MIN_SIZE, MAX_SIZE, GRAVITY, etc.
+        },
+        autoMouseEvents: false, // Use unified input system
+      });
+      // Set app type directly without sending message (we're already syncing from parent)
+      this.currentType = "cursor-app/ballpit";
+      document.body.setAttribute('app-type', "cursor-app/ballpit");
+      this.switching = false;
+    });
+  },
+
+  /**
+   * Actually switch to fluid cursor (called only by main app)
+   * 
+   * @memberof cursorApp
+   * @private
+   */
+  _switchToFluid: function() {
     if (this.switching) return; // Prevent rapid switching
     this.switching = true;
     
@@ -130,7 +169,9 @@ window.cursorApp = {
           }
         },
       });
-      this.setAppType("cursor-app/fluid");
+      // Set app type directly without sending message (we're already syncing from parent)
+      this.currentType = "cursor-app/fluid";
+      document.body.setAttribute('app-type', "cursor-app/fluid");
       this.switching = false;
     });
   },
@@ -185,8 +226,8 @@ window.cursorApp = {
  * Sets up event listeners and starts with ballpit cursor
  */
 document.addEventListener("DOMContentLoaded", () => {
-  // Initialize with ballpit cursor by default
-  window.cursorApp.switchToBallpit();
+  // Initialize with ballpit cursor by default (actual switch, not just request)
+  window.cursorApp._switchToBallpit();
 
   // Mouse event handler that works with any cursor type
   document.addEventListener("mousemove", (e) => {
@@ -240,10 +281,19 @@ document.addEventListener("DOMContentLoaded", () => {
           window.cursorApp[methodName]();
           window.cursorApp.syncingFromParent = false;
         } else {
-          console.warn("Unknown cursor type:", event.data.type);
+          console.warn("Unknown cursor type:", event.data.type, "or method not found:", methodName);
         }
       }
     }
+
+    if (event.data.command === "switch_app") {
+      if (window.cursorApp.currentType === "cursor-app/ballpit") {
+        window.cursorApp.switchToFluid();
+      } else {
+        window.cursorApp.switchToBallpit();
+      }
+    }
+
 
     // Safety check for valid coordinates in message
     if (typeof event.data.x === 'number' && typeof event.data.y === 'number') {
