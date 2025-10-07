@@ -16,14 +16,15 @@
  * @version 1.0.0
  */
 
-import { WebGLFluidCursor, WebGLBallpitCursor } from './index.js';
+import { WebGLFluidCursor, WebGLBallpitCursor, WebGLMetaBallsCursor } from './index.js';
 /**
  * Map of cursor type strings to method names for actual switching (called by main app)
  * @constant
  */
 const CURSOR_TYPE_METHODS = {
   "cursor-app/ballpit": "_switchToBallpit",
-  "cursor-app/fluid": "_switchToFluid"
+  "cursor-app/fluid": "_switchToFluid",
+  "cursor-app/metaballs": "_switchToMetaBalls"
 };
 
 /**
@@ -34,10 +35,10 @@ const CURSOR_TYPE_METHODS = {
  * @type {Object}
  */
 window.cursorApp = {
-  /** @type {string|null} Current active cursor type ('ballpit' or 'fluid') */
+  /** @type {string|null} Current active cursor type ('ballpit', 'fluid', or 'metaballs') */
   currentType: null,
   
-  /** @type {WebGLFluidCursor|WebGLBallpitCursor|null} Current cursor instance */
+  /** @type {WebGLFluidCursor|WebGLBallpitCursor|WebGLMetaBallsCursor|null} Current cursor instance */
   currentCursor: null,
   
   /** @type {boolean} Flag to prevent rapid cursor switching during transitions */
@@ -49,7 +50,7 @@ window.cursorApp = {
   /**
    * Set the current cursor type and update UI/attributes
    * 
-   * @param {string} type - The cursor type to set ('ballpit' or 'fluid')
+   * @param {string} type - The cursor type to set ('ballpit', 'fluid', or 'metaballs')
    * @memberof cursorApp
    */
   setAppType: function(type) {
@@ -74,7 +75,7 @@ window.cursorApp = {
   /**
    * Send a cursor switch request to the main app
    * 
-   * @param {string} cursorType - The cursor type to request ('cursor-app/ballpit' or 'cursor-app/fluid')
+   * @param {string} cursorType - The cursor type to request ('cursor-app/ballpit', 'cursor-app/fluid', or 'cursor-app/metaballs')
    * @memberof cursorApp
    */
   requestCursorSwitch: function(cursorType) {
@@ -114,6 +115,20 @@ window.cursorApp = {
   switchToFluid: function() {
     // Only send request to main app, don't switch locally
     this.requestCursorSwitch("cursor-app/fluid");
+  },
+
+  /**
+   * Switch to metaballs cursor with WebGL metaball simulation
+   * 
+   * Creates a new WebGLMetaBallsCursor instance with organic blob effects.
+   * Features animated metaballs that respond to cursor movement.
+   * 
+   * @memberof cursorApp
+   * @async
+   */
+  switchToMetaBalls: function() {
+    // Only send request to main app, don't switch locally
+    this.requestCursorSwitch("cursor-app/metaballs");
   },
 
   /**
@@ -172,6 +187,38 @@ window.cursorApp = {
       // Set app type directly without sending message (we're already syncing from parent)
       this.currentType = "cursor-app/fluid";
       document.body.setAttribute('app-type', "cursor-app/fluid");
+      this.switching = false;
+    });
+  },
+
+  /**
+   * Actually switch to metaballs cursor (called only by main app)
+   * 
+   * @memberof cursorApp
+   * @private
+   */
+  _switchToMetaBalls: function() {
+    if (this.switching) return; // Prevent rapid switching
+    this.switching = true;
+    
+    Promise.resolve(this.destroyCurrentCursor()).then(() => {
+      this.currentCursor = new WebGLMetaBallsCursor({
+        configOverrides: {
+          BALL_COUNT: 15,           // Number of animated metaballs
+          ANIMATION_SIZE: 30,       // Size of the animation area
+          CURSOR_BALL_SIZE: 3,      // Size of cursor metaball
+          SPEED: 0.3,               // Animation speed
+          CLUMP_FACTOR: 1,          // How tightly balls clump
+          HOVER_SMOOTHNESS: 0.05,   // Cursor following smoothness
+          COLOR: [1, 1, 1],         // Main color (white)
+          CURSOR_COLOR: [1, 1, 1],  // Cursor color (white)
+          ENABLE_TRANSPARENCY: true // Enable transparency
+        },
+        autoMouseEvents: false, // Use unified input system
+      });
+      // Set app type directly without sending message (we're already syncing from parent)
+      this.currentType = "cursor-app/metaballs";
+      document.body.setAttribute('app-type', "cursor-app/metaballs");
       this.switching = false;
     });
   },

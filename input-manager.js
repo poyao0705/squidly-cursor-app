@@ -106,9 +106,8 @@ class InputManager {
   _handleBallpitInput(pointer) {
     // For ballpit, we just update the pointer data
     // The owner will handle the actual ball physics
-    if (this.options.useBallAssignment && 
-        pointer.id !== "mouse" && 
-        (pointer.id.includes("eyes") || pointer.id.includes("gaze"))) {
+    // Assign balls to all non-mouse users (eye gaze, host-eye, etc.)
+    if (this.options.useBallAssignment && pointer.id !== "mouse") {
       this._assignBallIndex(pointer.id);
     }
   }
