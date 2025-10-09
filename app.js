@@ -27,6 +27,9 @@ const CURSOR_TYPE_METHODS = {
   "cursor-app/metaballs": "_switchToMetaBalls"
 };
 
+firebaseSet("cursor-app/currentType", "cursor-app/ballpit");
+
+
 /**
  * Global cursor management object
  * Provides unified interface for managing cursor effects and input handling
@@ -61,10 +64,7 @@ window.cursorApp = {
       
       // Only send message to parent if we're not syncing (avoid infinite loop)
       if (!this.syncingFromParent) {
-        window.parent.postMessage({
-          mode: "app_type",
-          type: type
-        }, "*");
+        firebaseSet("cursor-app/currentType", type);
         console.log("App type set to:", type, "(message sent to parent)");
       } else {
         console.log("App type set to:", type, "(synced from parent, no message sent)");
@@ -80,10 +80,11 @@ window.cursorApp = {
    */
   requestCursorSwitch: function(cursorType) {
     if (cursorType) {
-      window.parent.postMessage({
-        mode: "app_type",
-        type: cursorType
-      }, "*");
+      // window.parent.postMessage({
+      //   mode: "app_type",
+      //   type: cursorType
+      // }, "*");
+      firebaseSet("cursor-app/currentType", cursorType);
       console.log("Requested cursor switch to:", cursorType);
     }
   },
@@ -274,6 +275,7 @@ window.cursorApp = {
  */
 document.addEventListener("DOMContentLoaded", () => {
   // Initialize with ballpit cursor by default (actual switch, not just request)
+  // Add a list of gridicons info, sends to parent app
   window.cursorApp._switchToBallpit();
 
   // Mouse event handler that works with any cursor type
@@ -282,37 +284,69 @@ document.addEventListener("DOMContentLoaded", () => {
   });
 
   // Listen for messages from SquidlyV3
+  firebaseOnValue("cursor-app/currentType", (value) => {
+    // Switch to the requested cursor type if different
+    if (value !== window.cursorApp.currentType) {
+      const methodName = CURSOR_TYPE_METHODS[value];
+      if (methodName && typeof window.cursorApp[methodName] === 'function') {
+        // Set flag to prevent sending message back to parent
+        window.cursorApp.syncingFromParent = true;
+        window.cursorApp[methodName]();
+        window.cursorApp.syncingFromParent = false;
+      } else {
+        console.log("Unknown cursor type:", value, "or method not found:", methodName);
+      }
+    }
+  });
+
+  setIcon(1, 0, {
+    symbol: "switch",
+    displayValue: "Switch Mode",
+    type: "action",
+  }, (value) => {
+    // Cycle through available apps
+    const appTypes = Object.keys(CURSOR_TYPE_METHODS);
+    const currentIndex = appTypes.indexOf(window.cursorApp.currentType);
+    const nextIndex = (currentIndex + 1) % appTypes.length;
+    const nextAppType = appTypes[nextIndex];
+    
+    // Request switch using the requestCursorSwitch method
+    window.cursorApp.requestCursorSwitch(nextAppType);
+  });
+
+
+
   window.addEventListener("message", (event) => {
     if (!event.data) {
       return;
     }
 
-    // Handle sync_app_type message from parent
-    if (event.data.mode === "sync_app_type") {
-      // Switch to the requested cursor type if different
-      if (event.data.type !== window.cursorApp.currentType) {
-        const methodName = CURSOR_TYPE_METHODS[event.data.type];
-        if (methodName && typeof window.cursorApp[methodName] === 'function') {
-          // Set flag to prevent sending message back to parent
-          window.cursorApp.syncingFromParent = true;
-          window.cursorApp[methodName]();
-          window.cursorApp.syncingFromParent = false;
-        } else {
-          console.warn("Unknown cursor type:", event.data.type, "or method not found:", methodName);
-        }
-      }
-    }
+    // // Handle sync_app_type message from parent
+    // if (event.data.mode === "sync_app_type") {
+    //   // Switch to the requested cursor type if different
+    //   if (event.data.type !== window.cursorApp.currentType) {
+    //     const methodName = CURSOR_TYPE_METHODS[event.data.type];
+    //     if (methodName && typeof window.cursorApp[methodName] === 'function') {
+    //       // Set flag to prevent sending message back to parent
+    //       window.cursorApp.syncingFromParent = true;
+    //       window.cursorApp[methodName]();
+    //       window.cursorApp.syncingFromParent = false;
+    //     } else {
+    //       console.warn("Unknown cursor type:", event.data.type, "or method not found:", methodName);
+    //     }
+    //   }
+    // }
 
-    if (event.data.command === "switch_app") {
-      // Cycle through available apps
-      const appTypes = Object.keys(CURSOR_TYPE_METHODS);
-      const currentIndex = appTypes.indexOf(window.cursorApp.currentType);
-      const nextIndex = (currentIndex + 1) % appTypes.length;
-      const nextAppType = appTypes[nextIndex];
+    // if (event.data.command === "switch_app") {
+    //   // Cycle through available apps
+    //   const appTypes = Object.keys(CURSOR_TYPE_METHODS);
+    //   const currentIndex = appTypes.indexOf(window.cursorApp.currentType);
+    //   const nextIndex = (currentIndex + 1) % appTypes.length;
+    //   const nextAppType = appTypes[nextIndex];
       
-      // Request switch using the requestCursorSwitch method
-      window.cursorApp.requestCursorSwitch(nextAppType);
-    }
+    //   // Request switch using the requestCursorSwitch method
+    //   window.cursorApp.requestCursorSwitch(nextAppType);
+    // }
 
 
     // Safety check for valid coordinates in message

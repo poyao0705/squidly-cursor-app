@@ -1,9 +1,9 @@
 {
-    "name": "Cursor App",
-    "title": "Cursor App",
-    "subtitle": "Cursor App",
+    "name": "Cursor Splash",
+    "title": "Cursor Splash",
+    "subtitle": "Cursor Splash",
     "version": "1.0.1",
     "description": "A interactive cursor app for Squidly",
     "author": "Po-Yao Huang",
-    "icon": "calibrate"
+    "icon": "http://127.0.0.1:5500/cursor.png"
 }
