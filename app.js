@@ -65,9 +65,6 @@ window.cursorApp = {
       // Only send message to parent if we're not syncing (avoid infinite loop)
       if (!this.syncingFromParent) {
         firebaseSet("cursor-app/currentType", type);
-        console.log("App type set to:", type, "(message sent to parent)");
-      } else {
-        console.log("App type set to:", type, "(synced from parent, no message sent)");
       }
     }
   },
@@ -80,12 +77,7 @@ window.cursorApp = {
    */
   requestCursorSwitch: function(cursorType) {
     if (cursorType) {
-      // window.parent.postMessage({
-      //   mode: "app_type",
-      //   type: cursorType
-      // }, "*");
       firebaseSet("cursor-app/currentType", cursorType);
-      console.log("Requested cursor switch to:", cursorType);
     }
   },
 
@@ -299,6 +291,16 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   });
 
+  // Register a cursor listener that receives ALL cursor updates (eye gaze and mouse)
+  addCursorListener((data) => {
+    window.cursorApp.updatePointerPosition(
+      data.x,
+      data.y,
+      null, // Let system generate colors dynamically
+      data.user // user identifier (e.g., "host-eyes", "participant-mouse", etc.)
+    );
+  });
+
   setIcon(1, 0, {
     symbol: "switch",
     displayValue: "Switch Mode",
@@ -312,52 +314,5 @@ document.addEventListener("DOMContentLoaded", () => {
     
     // Request switch using the requestCursorSwitch method
     window.cursorApp.requestCursorSwitch(nextAppType);
-  });
-
-
-
-  window.addEventListener("message", (event) => {
-    if (!event.data) {
-      return;
-    }
-
-    // // Handle sync_app_type message from parent
-    // if (event.data.mode === "sync_app_type") {
-    //   // Switch to the requested cursor type if different
-    //   if (event.data.type !== window.cursorApp.currentType) {
-    //     const methodName = CURSOR_TYPE_METHODS[event.data.type];
-    //     if (methodName && typeof window.cursorApp[methodName] === 'function') {
-    //       // Set flag to prevent sending message back to parent
-    //       window.cursorApp.syncingFromParent = true;
-    //       window.cursorApp[methodName]();
-    //       window.cursorApp.syncingFromParent = false;
-    //     } else {
-    //       console.warn("Unknown cursor type:", event.data.type, "or method not found:", methodName);
-    //     }
-    //   }
-    // }
-
-    // if (event.data.command === "switch_app") {
-    //   // Cycle through available apps
-    //   const appTypes = Object.keys(CURSOR_TYPE_METHODS);
-    //   const currentIndex = appTypes.indexOf(window.cursorApp.currentType);
-    //   const nextIndex = (currentIndex + 1) % appTypes.length;
-    //   const nextAppType = appTypes[nextIndex];
-      
-    //   // Request switch using the requestCursorSwitch method
-    //   window.cursorApp.requestCursorSwitch(nextAppType);
-    // }
-
-
-    // Safety check for valid coordinates in message
-    if (typeof event.data.x === 'number' && typeof event.data.y === 'number') {
-      // Handle both cursor types with unified method
-      window.cursorApp.updatePointerPosition(
-        event.data.x,
-        event.data.y,
-        null, // Let system generate colors dynamically
-        event.data.user || "default"
-      );
-    }
   });
 });
