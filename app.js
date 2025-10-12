@@ -560,8 +560,8 @@ document.addEventListener("DOMContentLoaded", () => {
   // The button appears at grid position (1, 0) with a "switch" icon.
   // 
   // PARAMETERS:
-  // - x: 1 (grid column)
-  // - y: 0 (grid row)
+  // - y: 1 (grid row)
+  // - x: 0 (grid column)
   // - options.symbol: "switch" (icon to display)
   // - options.displayValue: "Change Cursor" (tooltip text)
   // - options.type: "action" (button type)
