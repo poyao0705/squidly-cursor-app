@@ -11,6 +11,7 @@ A high-performance collection of interactive cursor effects for Squidly applicat
 - **🌊 WebGL Fluid Cursor**: Realistic fluid dynamics with custom WebGL shaders
 - **🎈 WebGL Ballpit Cursor**: Interactive 3D ball physics with THREE.js
 - **🔮 WebGL MetaBalls Cursor**: Organic blob effects with smooth metaball rendering
+- **🔊 Collision Sound Effects**: Interactive audio feedback for cursor-to-ball collisions (Web Audio API)
 - **👁️ Eye Tracking Support**: Full integration with Squidly eye gaze data
 - **🎮 Multiple Input Sources**: Mouse, touch, and eye tracking support
 - **📦 Exportable Modules**: Clean ES6 module exports
@@ -123,6 +124,9 @@ new WebGLBallpitCursor(options)
 
 - `pause()` - Pause physics simulation
 - `play()` - Resume physics simulation
+- `enableSound()` - Enable collision sound effects
+- `disableSound()` - Disable collision sound effects
+- `loadCollisionSound(audioUrl)` - Load custom audio file for collisions (async)
 - `destroy()` - Clean up resources and remove from DOM
 
 #### Configuration
@@ -135,6 +139,7 @@ new WebGLBallpitCursor(options)
 | `GRAVITY` | number | 0.02 | Gravity strength (0.01-0.1) |
 | `FRICTION` | number | 0.998 | Air resistance (0.9-0.999) |
 | `WALL_BOUNCE` | number | 0.95 | Bounce factor for walls (0.1-1.0) |
+| `collisionSoundUrl` | string | null | URL to audio file for collision sounds |
 
 ### WebGLMetaBallsCursor
 
@@ -201,6 +206,22 @@ ballpit.inputManager.updatePointerPosition(x, y, color, id);
 // Pause/resume physics
 ballpit.pause();
 ballpit.play();
+
+// Enable/disable collision sound effects
+ballpit.enableSound();   // Plays sounds when cursor ball collides with other balls
+ballpit.disableSound();  // Mutes collision sounds
+
+// Load custom collision sound (optional)
+await ballpit.loadCollisionSound('./sounds/boop.mp3');
+
+// Or specify sound URL at initialization
+const ballpitWithSound = new WebGLBallpitCursor({
+  configOverrides: {
+    COUNT: 100,
+    GRAVITY: 0.05,
+    collisionSoundUrl: './glass-clink.mp3'  // Use custom audio file
+  }
+});
 ```
 
 ### Basic MetaBalls Cursor

@@ -269,6 +269,7 @@ window.cursorApp = {
         configOverrides: {
           // Using default configuration from ballpit-cursor.js
           // You can customize: COUNT, MIN_SIZE, MAX_SIZE, GRAVITY, FRICTION, etc.
+          collisionSoundUrl: './glass-clink.mp3' // Custom collision sound effect
         },
         autoMouseEvents: false, // We handle input via addCursorListener instead
       });

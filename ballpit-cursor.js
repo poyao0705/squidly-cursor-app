@@ -60,6 +60,27 @@ class WebGLBallpitCursor {
       inactiveTimeout: 5000
     });
 
+    /** @type {AudioContext|null} Audio context for sound effects */
+    this.audioContext = null;
+    
+    /** @type {GainNode|null} Master gain node to prevent clipping */
+    this.masterGain = null;
+    
+    /** @type {AudioBuffer|null} Loaded audio buffer for collision sounds */
+    this.audioBuffer = null;
+    
+    /** @type {boolean} Whether sound effects are enabled */
+    this.soundEnabled = true;
+    
+    /** @type {string|null} URL to audio file for collision sounds */
+    this.collisionSoundUrl = configOverrides.collisionSoundUrl || null;
+    
+    /** @type {number} Minimum time between sounds (ms) to prevent audio spam */
+    this.soundCooldown = 80;
+    
+    /** @type {number} Last time a sound was played */
+    this.lastSoundTime = 0;
+
     /** @type {Object} Physics and rendering configuration */
     this.config = Object.assign(
       {
@@ -125,19 +146,73 @@ class WebGLBallpitCursor {
         this.config.PAUSED = true;
       }
       
-      /**
-       * Resume the ball physics simulation
-       * 
-       * Restarts the physics update loop from where it was paused.
-       * 
-       * @example
-       * ballpit.play();
-       * 
-       * @public
-       */
-      play() {
-        this.config.PAUSED = false;
-      }
+  /**
+   * Resume the ball physics simulation
+   * 
+   * Restarts the physics update loop from where it was paused.
+   * 
+   * @example
+   * ballpit.play();
+   * 
+   * @public
+   */
+  play() {
+    this.config.PAUSED = false;
+  }
+  
+  /**
+   * Enable sound effects for ball collisions
+   * 
+   * @example
+   * ballpit.enableSound();
+   * 
+   * @public
+   */
+  enableSound() {
+    this.soundEnabled = true;
+    this._initAudio();
+  }
+  
+  /**
+   * Disable sound effects for ball collisions
+   * 
+   * @example
+   * ballpit.disableSound();
+   * 
+   * @public
+   */
+  disableSound() {
+    this.soundEnabled = false;
+  }
+  
+  /**
+   * Load a custom collision sound from an audio file
+   * 
+   * @param {string} audioUrl - URL to the audio file (mp3, wav, ogg, etc.)
+   * @returns {Promise<boolean>} True if loaded successfully, false otherwise
+   * 
+   * @example
+   * await ballpit.loadCollisionSound('./sounds/boop.mp3');
+   * 
+   * @public
+   */
+  async loadCollisionSound(audioUrl) {
+    if (!this.audioContext) {
+      this._initAudio();
+    }
+    
+    try {
+      const response = await fetch(audioUrl);
+      const arrayBuffer = await response.arrayBuffer();
+      this.audioBuffer = await this.audioContext.decodeAudioData(arrayBuffer);
+      this.collisionSoundUrl = audioUrl;
+      console.log('[Ballpit] Collision sound loaded successfully from:', audioUrl);
+      return true;
+    } catch (e) {
+      console.warn('[Ballpit] Failed to load collision sound from:', audioUrl, e);
+      return false;
+    }
+  }
       
       /**
        * Destroy the ballpit cursor and clean up all resources
@@ -170,11 +245,18 @@ class WebGLBallpitCursor {
             }
           });
         }
-        this.renderer?.dispose?.();
-        this.canvas?.remove?.();
-  
-        this.ready = false;
-      }
+    this.renderer?.dispose?.();
+    this.canvas?.remove?.();
+    
+    // Close audio context
+    if (this.audioContext) {
+      this.audioContext.close();
+      this.audioContext = null;
+      this.masterGain = null;
+    }
+
+    this.ready = false;
+  }
   
       // ---------- Core init ----------
       async _init() {
@@ -289,30 +371,165 @@ class WebGLBallpitCursor {
         window.addEventListener("resize", this._onResize);
         document.addEventListener("visibilitychange", this._onVisibility);
   
-        // Start
-        this._resize();
-        this._lastT = performance.now();
-        this.ready = true;
-        this._loop();
-      }
-  
-      // ---------- Input plumbing ----------
-      _onPointerInputChanged() {
-        // Use InputManager's target pointer logic
-        const targetPointer = this.inputManager.getTargetPointer();
-        
-        if (!targetPointer || !this.ready) return;
+    // Initialize audio system
+    this._initAudio();
 
-        // Project target coords into world plane
-        const w = window.innerWidth;
-        const h = window.innerHeight;
-        this.mouseNdc.set((targetPointer.x / w) * 2 - 1, -(targetPointer.y / h) * 2 + 1);
-        this.raycaster.setFromCamera(this.mouseNdc, this.camera);
-        this.camera.getWorldDirection(this.followPlane.normal);
-        if (this.raycaster.ray.intersectPlane(this.followPlane, this.planeHit)) {
-          this.center.copy(this.planeHit);
+    // Start
+    this._resize();
+    this._lastT = performance.now();
+    this.ready = true;
+    this._loop();
+  }
+  
+    // ---------- Audio System ----------
+    /**
+     * Initialize the Web Audio API context
+     * @private
+     */
+    async _initAudio() {
+      if (this.audioContext) return; // Already initialized
+      
+      try {
+        const AudioContext = window.AudioContext || window.webkitAudioContext;
+        this.audioContext = new AudioContext();
+        
+        // Create master gain node to prevent clipping
+        this.masterGain = this.audioContext.createGain();
+        this.masterGain.gain.value = 0.5; // Master volume limiter
+        this.masterGain.connect(this.audioContext.destination);
+        
+        // Load external audio file if provided
+        if (this.collisionSoundUrl) {
+          try {
+            const response = await fetch(this.collisionSoundUrl);
+            const arrayBuffer = await response.arrayBuffer();
+            this.audioBuffer = await this.audioContext.decodeAudioData(arrayBuffer);
+            console.log('[Ballpit] Collision sound loaded successfully');
+          } catch (e) {
+            console.warn('[Ballpit] Failed to load collision sound, using synthesized fallback:', e);
+            this.audioBuffer = null;
+          }
         }
+      } catch (e) {
+        console.warn('[Ballpit] Web Audio API not supported:', e);
+        this.soundEnabled = false;
       }
+    }
+
+    /**
+     * Play a collision sound effect
+     * @param {number} intensity - Collision intensity (0-1)
+     * @private
+     */
+    _playCollisionSound(intensity = 0.5) {
+      if (!this.soundEnabled || !this.audioContext || !this.masterGain) return;
+      
+      // Cooldown to prevent audio spam
+      const now = performance.now();
+      if (now - this.lastSoundTime < this.soundCooldown) return;
+      this.lastSoundTime = now;
+      
+      try {
+        // Resume audio context if it was suspended (browser autoplay policy)
+        if (this.audioContext.state === 'suspended') {
+          this.audioContext.resume();
+        }
+        
+        // Use loaded audio buffer if available, otherwise synthesize
+        if (this.audioBuffer) {
+          this._playBufferSound(intensity);
+        } else {
+          this._playSynthesizedSound(intensity);
+        }
+      } catch (e) {
+        console.warn('[Ballpit] Error playing sound:', e);
+      }
+    }
+
+    /**
+     * Play sound from loaded audio buffer
+     * @param {number} intensity - Collision intensity (0-1)
+     * @private
+     */
+    _playBufferSound(intensity) {
+      const source = this.audioContext.createBufferSource();
+      const gainNode = this.audioContext.createGain();
+      
+      source.buffer = this.audioBuffer;
+      source.connect(gainNode);
+      gainNode.connect(this.masterGain);
+      
+      // Adjust playback rate based on intensity (pitch variation)
+      source.playbackRate.value = 0.8 + intensity * 0.6; // 0.8-1.4x speed
+      
+      // Volume based on intensity
+      const volume = Math.min(0.3 + intensity * 0.5, 0.8); // 0.3-0.8
+      gainNode.gain.setValueAtTime(volume, this.audioContext.currentTime);
+      
+      // Optional fade out
+      const duration = this.audioBuffer.duration / source.playbackRate.value;
+      if (duration > 0.1) {
+        gainNode.gain.setValueAtTime(volume, this.audioContext.currentTime);
+        gainNode.gain.exponentialRampToValueAtTime(0.01, this.audioContext.currentTime + duration);
+      }
+      
+      source.start(this.audioContext.currentTime);
+    }
+
+    /**
+     * Play synthesized sound (fallback)
+     * @param {number} intensity - Collision intensity (0-1)
+     * @private
+     */
+    _playSynthesizedSound(intensity) {
+      const oscillator = this.audioContext.createOscillator();
+      const gainNode = this.audioContext.createGain();
+      
+      // Connect nodes to master gain (prevents clipping)
+      oscillator.connect(gainNode);
+      gainNode.connect(this.masterGain);
+      
+      // Sound parameters based on intensity (lower volumes to prevent distortion)
+      const baseFreq = 250 + intensity * 350; // 250-600 Hz range
+      const volume = Math.min(0.08 + intensity * 0.12, 0.2); // Much lower max volume (0.08-0.2)
+      
+      oscillator.type = 'sine';
+      oscillator.frequency.setValueAtTime(baseFreq, this.audioContext.currentTime);
+      oscillator.frequency.exponentialRampToValueAtTime(
+        baseFreq * 0.5, 
+        this.audioContext.currentTime + 0.1
+      );
+      
+      // Smooth envelope to prevent clicks/pops
+      gainNode.gain.setValueAtTime(0, this.audioContext.currentTime);
+      gainNode.gain.linearRampToValueAtTime(volume, this.audioContext.currentTime + 0.005); // Quick attack
+      gainNode.gain.exponentialRampToValueAtTime(
+        0.001, 
+        this.audioContext.currentTime + 0.12
+      );
+      
+      // Play the sound
+      oscillator.start(this.audioContext.currentTime);
+      oscillator.stop(this.audioContext.currentTime + 0.13);
+    }
+
+    // ---------- Input plumbing ----------
+    _onPointerInputChanged() {
+      // Use InputManager's target pointer logic
+      const targetPointer = this.inputManager.getTargetPointer();
+      
+      if (!targetPointer || !this.ready) return;
+
+      // Project target coords into world plane
+      const w = window.innerWidth;
+      const h = window.innerHeight;
+      this.mouseNdc.set((targetPointer.x / w) * 2 - 1, -(targetPointer.y / h) * 2 + 1);
+      this.raycaster.setFromCamera(this.mouseNdc, this.camera);
+      this.camera.getWorldDirection(this.followPlane.normal);
+      if (this.raycaster.ray.intersectPlane(this.followPlane, this.planeHit)) {
+        this.center.copy(this.planeHit);
+      }
+    }
   
       // ---------- Frame loop ----------
       _loop() {
@@ -438,6 +655,10 @@ class WebGLBallpitCursor {
                   const speed = Math.hypot(v[b], v[b+1], v[b+2]) || 1;
                   const kick = 0.15 * speed + 0.2;
                   v[b] += nx * kick; v[b+1] += ny * kick; v[b+2] += nz * kick;
+                  
+                  // Play cursor collision sound (usually more energetic)
+                  const intensity = Math.min(overlap / minDist + speed * 0.3, 1.0);
+                  this._playCollisionSound(intensity);
                 }
               }
             }
