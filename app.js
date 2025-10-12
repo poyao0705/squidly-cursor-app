@@ -303,7 +303,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
   setIcon(1, 0, {
     symbol: "switch",
-    displayValue: "Switch Mode",
+    displayValue: "Change Cursor",
     type: "action",
   }, (value) => {
     // Cycle through available apps
