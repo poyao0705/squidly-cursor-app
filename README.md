@@ -291,8 +291,8 @@ This app integrates with the Squidly platform using the Squidly Apps API. These 
 Creates an interactive icon button in the Squidly grid interface.
 
 **Parameters:**
-- `x` (number): Grid X position (0-indexed)
 - `y` (number): Grid Y position (0-indexed)
+- `x` (number): Grid X position (0-indexed)
 - `options` (object): Icon configuration
   - `symbol` (string): Icon identifier (e.g., "switch", "play", "pause")
   - `displayValue` (string): Tooltip text shown on hover
