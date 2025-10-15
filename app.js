@@ -269,7 +269,7 @@ window.cursorApp = {
         configOverrides: {
           // Using default configuration from ballpit-cursor.js
           // You can customize: COUNT, MIN_SIZE, MAX_SIZE, GRAVITY, FRICTION, etc.
-          collisionSoundUrl: './glass-clink.mp3' // Custom collision sound effect
+          collisionSoundUrl: './sfx/glass-clink.mp3' // Custom collision sound effect
         },
         autoMouseEvents: false, // We handle input via addCursorListener instead
       });
@@ -364,7 +364,8 @@ window.cursorApp = {
           HOVER_SMOOTHNESS: 0.05,   // Cursor following smoothness (lower = smoother)
           COLOR: [1, 1, 1],         // Main color (white RGB 0-1)
           CURSOR_COLOR: [1, 1, 1],  // Cursor metaball color (white RGB 0-1)
-          ENABLE_TRANSPARENCY: true // Enable alpha transparency for smooth edges
+          ENABLE_TRANSPARENCY: true, // Enable alpha transparency for smooth edges
+          collisionSoundUrl: './sfx/water-drip.mp3' // Custom collision sound effect
         },
         autoMouseEvents: false, // We handle input via addCursorListener instead
       });

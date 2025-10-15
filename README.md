@@ -219,7 +219,7 @@ const ballpitWithSound = new WebGLBallpitCursor({
   configOverrides: {
     COUNT: 100,
     GRAVITY: 0.05,
-    collisionSoundUrl: './glass-clink.mp3'  // Use custom audio file
+    collisionSoundUrl: './sfx/glass-clink.mp3'  // Use custom audio file
   }
 });
 ```

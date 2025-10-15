@@ -8,6 +8,7 @@
  */
 
 import InputManager from './input-manager.js';
+import { CollisionSoundEngine } from './sound-engine.js';
 
 // Dynamically import OGL (Renderer, Program, Mesh, Triangle, Transform, Vec3)
 const oglCdn = 'https://cdn.jsdelivr.net/npm/ogl@0.0.95/src/index.mjs';
@@ -122,6 +123,14 @@ class WebGLMetaBallsCursor {
     this.metaBalls = [];
     this.ballParams = [];
     this.animationId = null;
+    this.collisionStates = new Map(); // Track collision states per pointer
+
+    this.soundEngine = new CollisionSoundEngine({
+      masterGain: 0.4,
+      collisionSoundUrl: configOverrides.collisionSoundUrl || './sfx/water-drip.mp3',
+      soundCooldown: 150,
+      soundEnabled: true,
+    });
 
     // mirror your other cursors' config style
     this.config = Object.assign(
@@ -170,7 +179,7 @@ class WebGLMetaBallsCursor {
     this._onResize = this._onResize.bind(this);
     window.addEventListener('resize', this._onResize);
 
-    this._init().catch(console.error);
+    this._init().catch(() => {});
   }
 
   // === public API (pause/play are no-ops here, kept for symmetry) =========
@@ -181,6 +190,13 @@ class WebGLMetaBallsCursor {
     if (this.animationId) cancelAnimationFrame(this.animationId);
     window.removeEventListener('resize', this._onResize);
     if (this._autoMouse && this._onMouseMove) window.removeEventListener('mousemove', this._onMouseMove);
+    
+    // Clean up sound engine
+    if (this.soundEngine) {
+      this.soundEngine.destroy();
+      this.soundEngine = null;
+    }
+    
     try { this.gl?.getExtension('WEBGL_lose_context')?.loseContext(); } catch {}
     this.canvas?.parentElement?.removeChild(this.canvas);
     this.ready = false;
@@ -334,6 +350,46 @@ class WebGLMetaBallsCursor {
     }
   }
 
+  _checkCollisions() {
+    if (!this.soundEngine) return;
+    
+    const scale = this.config.ANIMATION_SIZE / this.gl.canvas.height;
+    const res = { x: this.gl.drawingBufferWidth, y: this.gl.drawingBufferHeight };
+    
+    // Check each active pointer against each animated ball
+    for (let p = 0; p < this.MAX_POINTERS; p++) {
+      if (p >= this.program.uniforms.iPointerCount.value) break;
+      
+      const ptrX = (this.pointerPosRad[p].x - res.x * 0.5) * scale;
+      const ptrY = (this.pointerPosRad[p].y - res.y * 0.5) * scale;
+      const ptrRad = this.pointerPosRad[p].z;
+      
+      for (let b = 0; b < this.ballParams.length; b++) {
+        const ballX = this.metaBalls[b].x;
+        const ballY = this.metaBalls[b].y;
+        const ballRad = this.metaBalls[b].z;
+        
+        const dx = ptrX - ballX;
+        const dy = ptrY - ballY;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+        const isColliding = dist < (ptrRad + ballRad);
+        
+        const key = `${p}-${b}`;
+        const wasColliding = this.collisionStates.get(key);
+        
+        if (isColliding && !wasColliding) {
+          // Entering collision
+          this.soundEngine.playCollision(0.5);
+          this.collisionStates.set(key, true);
+        } else if (!isColliding && wasColliding) {
+          // Exiting collision
+          this.soundEngine.playCollision(0.5);
+          this.collisionStates.set(key, false);
+        }
+      }
+    }
+  }
+
   _loop(){
     this.animationId = requestAnimationFrame(() => this._loop());
     if (!this.ready) return;
@@ -399,7 +455,7 @@ class WebGLMetaBallsCursor {
 
     this.program.uniforms.iPointerCount.value = count;
 
-    // (Optional) still set iMouse to the “primary” pointer for any other logic
+    // (Optional) still set iMouse to the "primary" pointer for any other logic
     const primary = this.inputManager.getTargetPointer(); // mouse preferred
     if (primary) {
     const xPix = this._scaleByPixelRatio(primary.x);
@@ -407,6 +463,8 @@ class WebGLMetaBallsCursor {
     this.program.uniforms.iMouse.value.set(xPix, yPix, 0);
     }
 
+    // Check for collisions between pointer metaballs and animated metaballs
+    this._checkCollisions();
 
     this.renderer.render({ scene: this.scene, camera: this.camera });
   }
