@@ -569,7 +569,7 @@ document.addEventListener("DOMContentLoaded", () => {
   // - callback: Function called when button is clicked
   //
   setIcon(1, 0, {
-    symbol: "switch",
+    symbol: "change",
     displayValue: "Change Cursor",
     type: "action",
   }, (value) => {
