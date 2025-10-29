@@ -589,4 +589,81 @@ document.addEventListener("DOMContentLoaded", () => {
     // Request the switch via Firebase (all users will receive the update)
     window.cursorApp.requestCursorSwitch(nextAppType);
   });
+
+  // -----------------------------------------------------------------------
+  // STEP 6: Create mute/unmute button using getSettings/setSettings
+  // -----------------------------------------------------------------------
+  // SQUIDLY API: getSettings(path, callback), setSettings(path, value)
+  // 
+  // This creates a mute/unmute button that toggles the audio mute state.
+  // The button uses getSettings to read the current state and setSettings
+  // to toggle it.
+  //
+  const muteSettingPath = (typeof session_info !== 'undefined' && session_info.user) 
+    ? `${session_info.user}/keyboardShortcuts/a` 
+    : "host/keyboardShortcuts/a"; // Default to host if session_info not available
+  
+  console.log("[Mute Button] Initializing with path:", muteSettingPath);
+  
+  // Callback function for mute button clicks
+  const muteButtonCallback = (value) => {
+    console.log("[Mute Button] Button clicked");
+    
+    // Check if functions are available
+    if (typeof getSettings === 'undefined' || typeof setSettings === 'undefined') {
+      console.warn("[Mute Button] getSettings/setSettings not available - cannot toggle mute");
+      return;
+    }
+    
+    // Get current mute state
+    getSettings(muteSettingPath, (currentState) => {
+      console.log("[Mute Button] Current mute state:", currentState);
+      
+      // Toggle the mute state
+      const newState = !currentState;
+      console.log("[Mute Button] Setting new mute state to:", newState);
+      
+      setSettings(muteSettingPath, newState);
+      
+      // Update button appearance
+      updateMuteButton(newState);
+    });
+  };
+  
+  // Function to update button appearance based on mute state
+  function updateMuteButton(isMuted) {
+    console.log("[Mute Button] Updating button appearance, isMuted:", isMuted);
+    // Update the button icon and text based on mute state
+    setIcon(2, 0, {
+      symbol: isMuted ? "mute" : "unmute",
+      displayValue: isMuted ? "Unmute Audio" : "Mute Audio",
+      type: "action",
+      active: isMuted,
+    }, muteButtonCallback);
+  }
+  
+  // Initialize the mute button
+  if (typeof setIcon !== 'undefined') {
+    // Create the button (will show as muted by default)
+    setIcon(1, 1, {
+      symbol: "mute",
+      displayValue: "Mute Audio",
+      type: "action",
+      active: false,
+    }, muteButtonCallback);
+    
+    console.log("[Mute Button] Button created - will be functional when getSettings/setSettings are available");
+    
+    // Try to get initial state if functions are available
+    if (typeof getSettings !== 'undefined') {
+      getSettings(muteSettingPath, (currentState) => {
+        console.log("[Mute Button] Initial mute state:", currentState);
+        updateMuteButton(currentState);
+      });
+    } else {
+      console.log("[Mute Button] getSettings not available - button created but not functional yet");
+    }
+  } else {
+    console.warn("[Mute Button] setIcon not available - cannot create mute button");
+  }
 });
