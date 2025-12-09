@@ -279,6 +279,9 @@ window.cursorApp = {
       this.currentType = "cursor-app/ballpit";
       document.body.setAttribute('app-type', "cursor-app/ballpit");
       this.switching = false;
+      
+      // Apply current volume setting/mute state to the new cursor
+      this.updateAppVolume();
     });
   },
 
@@ -329,6 +332,9 @@ window.cursorApp = {
       this.currentType = "cursor-app/fluid";
       document.body.setAttribute('app-type', "cursor-app/fluid");
       this.switching = false;
+      
+      // Apply current volume setting/mute state to the new cursor
+      this.updateAppVolume();
     });
   },
 
@@ -375,6 +381,9 @@ window.cursorApp = {
       this.currentType = "cursor-app/metaballs";
       document.body.setAttribute('app-type', "cursor-app/metaballs");
       this.switching = false;
+      
+      // Apply current volume setting/mute state to the new cursor
+      this.updateAppVolume();
     });
   },
   
@@ -448,37 +457,73 @@ window.cursorApp = {
     );
   },
   
+  // ========================
+  // AUDIO MANAGEMENT
+  // ========================
+
+  /**
+   * Current system volume level (0.0 to 1.0)
+   * @type {number}
+   */
+  appVolume: 1.0,
+
+  /**
+   * Update the effective volume on the current cursor
+   * 
+   * Calculates the final volume based on the system volume setting
+   * and the local mute state, then applies it to the active cursor.
+   * 
+   * @memberof cursorApp
+   * @public
+   */
+  updateAppVolume: function() {
+    // Calculate effective volume
+    // If muted, volume is 0. Otherwise, use system volume.
+    const effectiveVolume = this.isMuted ? 0 : this.appVolume;
+    
+    // Apply to current cursor if it exists and has setVolume method
+    if (this.currentCursor && typeof this.currentCursor.setVolume === 'function') {
+      this.currentCursor.setVolume(effectiveVolume);
+    }
+  },
+
 };
 
 // =============================================================================
 // EVENT HANDLERS AND INITIALIZATION
 // =============================================================================
-/**
- * Initialize the Cursor Splash app when the DOM is ready
- * 
- * This is where everything starts! This function:
- * 1. Initializes the default cursor (ballpit)
- * 2. Sets up local mouse movement handling
- * 3. Listens for Firebase updates (cursor type changes from any user)
- * 4. Registers for multi-user cursor updates via addCursorListener
- * 5. Creates the grid icon button for switching cursors
- */
 document.addEventListener("DOMContentLoaded", () => {
   
   // -----------------------------------------------------------------------
-  // STEP 1: Initialize with ballpit cursor
+  // STEP 1: Implement Volume Sync with System Settings
   // -----------------------------------------------------------------------
-  // Call the private method directly to create the initial cursor.
-  // We use the private method (_switchToBallpit) because we don't want
-  // to broadcast this to Firebase yet - the firebaseSet at the top of
-  // the file already set the initial value.
+  
+  // 1. Get initial volume from host settings
+  if (window.getSettings) {
+    window.getSettings("host/volume/level", (value) => {
+      // Volume is 0-100, convert to 0-1
+      window.cursorApp.appVolume = (typeof value === 'number' ? value : 70) / 100;
+      window.cursorApp.updateAppVolume();
+    });
+  }
+
+  // 2. Listen for volume changes
+  if (window.addSettingsListener) {
+    window.addSettingsListener("host/volume/level", (value) => {
+      // Volume is 0-100, convert to 0-1
+      window.cursorApp.appVolume = (typeof value === 'number' ? value : 70) / 100;
+      window.cursorApp.updateAppVolume();
+    });
+  }
+
+  // -----------------------------------------------------------------------
+  // STEP 2: Initialize with ballpit cursor
+  // -----------------------------------------------------------------------
   window.cursorApp._switchToBallpit();
 
   // -----------------------------------------------------------------------
-  // STEP 2: Set up local mouse movement handler
+  // STEP 3: Set up local mouse movement handler
   // -----------------------------------------------------------------------
-  // This captures the local user's mouse movements and updates the cursor.
-  // Note: This is separate from addCursorListener, which handles ALL users.
   document.addEventListener("mousemove", (e) => {
     window.cursorApp.updatePointerPosition(
       e.clientX,  // Mouse X position in pixels
@@ -489,180 +534,91 @@ document.addEventListener("DOMContentLoaded", () => {
   });
 
   // -----------------------------------------------------------------------
-  // STEP 3: Listen for cursor type changes via Firebase
+  // STEP 4: Listen for cursor type changes via Firebase
   // -----------------------------------------------------------------------
-  // SQUIDLY API: firebaseOnValue(path, callback)
-  // 
-  // This listens for changes to "cursor-app/currentType" in Firebase.
-  // When ANY user (including this one) changes the cursor type, this
-  // callback fires and ALL users switch to the same cursor type.
-  // 
-  // HOW IT WORKS:
-  // - User A clicks the icon button
-  // - User A's app calls firebaseSet("cursor-app/currentType", "cursor-app/fluid")
-  // - Firebase broadcasts this to ALL users (including User A)
-  // - This callback fires on ALL users' apps
-  // - Each app switches to the fluid cursor
-  // - Result: Everyone sees the same cursor effect in sync
-  //
   firebaseOnValue("cursor-app/currentType", (value) => {
-    // Only switch if the value is different from our current type
     if (value !== window.cursorApp.currentType) {
-      // Look up the method name for this cursor type
       const methodName = CURSOR_TYPE_METHODS[value];
       
       if (methodName && typeof window.cursorApp[methodName] === 'function') {
-        // Set flag to prevent infinite loop
-        // (we're receiving from Firebase, so don't send back to Firebase)
         window.cursorApp.syncingFromParent = true;
         
-        // Call the private _switchToXXX method to perform the actual switch
+        // Switch cursor
         window.cursorApp[methodName]();
+
+        // Apply current volume to the new cursor!
+        // We defer this slightly to ensure the promise in _switchToXXX has resolved
+        // and currentCursor is set. Actually _switchToXXX updates currentCursor inside
+        // the promise chain.
+        // But since we can't easily hook into that promise return here without changing
+        // _switchToXXX signature, we can rely on updateAppVolume checking for currentCursor.
+        // Better: Update _switchToXXX methods to call updateAppVolume, OR
+        // just set a timeout here, OR modify the methods.
+        // Modifying the methods is cleaner. I will do that in a separate edit block for clarity.
         
-        // Clear the flag
         window.cursorApp.syncingFromParent = false;
-      } else {
-        console.log("Unknown cursor type:", value, "or method not found:", methodName);
       }
     }
   });
 
   // -----------------------------------------------------------------------
-  // STEP 4: Register for multi-user cursor updates
+  // STEP 5: Register for multi-user cursor updates
   // -----------------------------------------------------------------------
-  // SQUIDLY API: addCursorListener(callback)
-  // 
-  // This receives cursor positions from ALL users in the Squidly session.
-  // Each time any user moves their mouse or eye gaze, this callback fires.
-  // 
-  // DATA RECEIVED:
-  // - data.x: X coordinate in pixels
-  // - data.y: Y coordinate in pixels
-  // - data.user: User identifier string
-  //   Examples: "host-eyes", "host-mouse", "participant-1-eyes", etc.
-  // 
-  // The data is automatically forwarded to the current cursor's input
-  // manager, which handles displaying each user's cursor in the effect.
-  //
   addCursorListener((data) => {
     window.cursorApp.updatePointerPosition(
-      data.x,    // X coordinate from any user
-      data.y,    // Y coordinate from any user
-      null,      // Let system generate colors dynamically for each user
-      data.user  // User identifier (e.g., "host-eyes", "participant-mouse")
+      data.x,    
+      data.y,    
+      null,      
+      data.user  
     );
   });
 
   // -----------------------------------------------------------------------
-  // STEP 5: Create the grid icon button for cursor switching
+  // STEP 6: Create the grid icon button for cursor switching
   // -----------------------------------------------------------------------
-  // SQUIDLY API: setIcon(x, y, options, callback)
-  // 
-  // This creates an interactive button in the Squidly grid interface.
-  // The button appears at grid position (1, 0) with a "switch" icon.
-  // 
-  // PARAMETERS:
-  // - y: 1 (grid row)
-  // - x: 0 (grid column)
-  // - options.symbol: "switch" (icon to display)
-  // - options.displayValue: "Change Cursor" (tooltip text)
-  // - options.type: "action" (button type)
-  // - callback: Function called when button is clicked
-  //
   setIcon(1, 0, {
     symbol: "change",
     displayValue: "Change Cursor",
     type: "action",
   }, (value) => {
-    // This callback is called when the user clicks the icon button
-    
-    // Get all available cursor types
     const appTypes = Object.keys(CURSOR_TYPE_METHODS);
-    
-    // Find the current cursor type's index
     const currentIndex = appTypes.indexOf(window.cursorApp.currentType);
-    
-    // Calculate next index (cycles back to 0 after last)
     const nextIndex = (currentIndex + 1) % appTypes.length;
     const nextAppType = appTypes[nextIndex];
-    
-    // Request the switch via Firebase (all users will receive the update)
     window.cursorApp.requestCursorSwitch(nextAppType);
   });
 
   // -----------------------------------------------------------------------
-  // STEP 6: Create mute/unmute button using getSettings/setSettings
+  // STEP 7: Create mute/unmute button using cursor-app/isMuted
   // -----------------------------------------------------------------------
-  // SQUIDLY API: getSettings(path, callback), setSettings(path, value)
-  // 
-  // This creates a mute/unmute button that toggles the audio mute state.
-  // The button uses getSettings to read the current state and setSettings
-  // to toggle it.
-  //
-  const muteSettingPath = (typeof session_info !== 'undefined' && session_info.user) 
-    ? `${session_info.user}/keyboardShortcuts/a` 
-    : "host/keyboardShortcuts/a"; // Default to host if session_info not available
-  
-  console.log("[Mute Button] Initializing with path:", muteSettingPath);
-  
-  // Callback function for mute button clicks
-  const muteButtonCallback = (value) => {
-    console.log("[Mute Button] Button clicked");
+  window.cursorApp.isMuted = false;
+
+  firebaseOnValue("cursor-app/isMuted", (isMuted) => {
+    window.cursorApp.isMuted = !!isMuted;
     
-    // Check if functions are available
-    if (typeof getSettings === 'undefined' || typeof setSettings === 'undefined') {
-      console.warn("[Mute Button] getSettings/setSettings not available - cannot toggle mute");
-      return;
-    }
+    // Update button appearance
+    updateMuteButton(window.cursorApp.isMuted);
     
-    // Get current mute state
-    getSettings(muteSettingPath, (currentState) => {
-      console.log("[Mute Button] Current mute state:", currentState);
-      
-      // Toggle the mute state
-      const newState = !currentState;
-      console.log("[Mute Button] Setting new mute state to:", newState);
-      
-      setSettings(muteSettingPath, newState);
-      
-      // Update button appearance
-      updateMuteButton(newState);
-    });
+    // Apply volume update (handles the muting)
+    window.cursorApp.updateAppVolume();
+  });
+
+  const muteButtonCallback = () => {
+    const newState = !window.cursorApp.isMuted;
+    firebaseSet("cursor-app/isMuted", newState);
   };
   
-  // Function to update button appearance based on mute state
   function updateMuteButton(isMuted) {
-    console.log("[Mute Button] Updating button appearance, isMuted:", isMuted);
-    // Update the button icon and text based on mute state
     setIcon(2, 0, {
-      symbol: isMuted ? "mute" : "unmute",
+      symbol: isMuted ? "unmute" : "mute",
       displayValue: isMuted ? "Unmute Audio" : "Mute Audio",
       type: "action",
       active: isMuted,
     }, muteButtonCallback);
   }
   
-  // Initialize the mute button
   if (typeof setIcon !== 'undefined') {
-    // Create the button (will show as muted by default)
-    setIcon(1, 1, {
-      symbol: "mute",
-      displayValue: "Mute Audio",
-      type: "action",
-      active: false,
-    }, muteButtonCallback);
-    
-    console.log("[Mute Button] Button created - will be functional when getSettings/setSettings are available");
-    
-    // Try to get initial state if functions are available
-    if (typeof getSettings !== 'undefined') {
-      getSettings(muteSettingPath, (currentState) => {
-        console.log("[Mute Button] Initial mute state:", currentState);
-        updateMuteButton(currentState);
-      });
-    } else {
-      console.log("[Mute Button] getSettings not available - button created but not functional yet");
-    }
+    updateMuteButton(false);
   } else {
     console.warn("[Mute Button] setIcon not available - cannot create mute button");
   }

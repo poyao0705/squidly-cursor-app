@@ -232,6 +232,22 @@ class WebGLFluidCursor {
   }
 
   /**
+   * Set the volume for fluid sound effects
+   *
+   * @param {number} volume - Volume level (0.0 to 1.0)
+   *
+   * @example
+   * fluidCursor.setVolume(0.5);
+   *
+   * @public
+   */
+  setVolume(volume) {
+    if (this.soundEngine) {
+      this.soundEngine.setVolume(volume);
+    }
+  }
+
+  /**
    * Destroy the fluid cursor and clean up all resources
    *
    * Safely destroys the WebGL context, removes event listeners, clears

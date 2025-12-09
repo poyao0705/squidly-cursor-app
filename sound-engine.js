@@ -225,6 +225,19 @@ class FluidSoundEngine {
     return best;
   }
 
+  /**
+   * Set the master volume
+   * @param {number} volume - Volume level (0.0 to 1.0)
+   * @public
+   */
+  setVolume(volume) {
+    if (this.master && this.master.gain) {
+      // Clamp between 0 and 1
+      const v = Math.max(0, Math.min(1, volume));
+      this.master.gain.setValueAtTime(v, this.ctx.currentTime);
+    }
+  }
+
   // Clean up all voices and audio context
   destroy() {
     this.voices.forEach((voice) => {
@@ -446,6 +459,21 @@ class CollisionSoundEngine {
    */
   disableSound() {
     this.soundEnabled = false;
+  }
+
+  /**
+   * Set the master volume
+   * @param {number} volume - Volume level (0.0 to 1.0)
+   * @public
+   */
+  setVolume(volume) {
+    this.masterGain = Math.max(0, Math.min(1, volume));
+    if (this.masterGainNode) {
+      this.masterGainNode.gain.setValueAtTime(
+        this.masterGain,
+        this.audioContext ? this.audioContext.currentTime : 0
+      );
+    }
   }
 
   /**

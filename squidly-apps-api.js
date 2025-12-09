@@ -9,7 +9,7 @@ function firebaseSet(path, value){
     }, "*");
 }
 
-function firebaseOnValue(path){
+function firebaseOnValue(path, callback){
     FIREBASE_ON_VALUE_CALLBACKS[path] = callback;
     window.parent.postMessage({
         mode: "firebaseOnValue",

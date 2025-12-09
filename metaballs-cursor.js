@@ -186,6 +186,22 @@ class WebGLMetaBallsCursor {
   pause() { /* optional to implement */ }
   play() { /* optional to implement */ }
 
+  /**
+   * Set the volume for metaball collisions
+   * 
+   * @param {number} volume - Volume level (0.0 to 1.0)
+   * 
+   * @example
+   * metaballs.setVolume(0.5);
+   * 
+   * @public
+   */
+  setVolume(volume) {
+    if (this.soundEngine) {
+      this.soundEngine.setVolume(volume);
+    }
+  }
+
   destroy() {
     if (this.animationId) cancelAnimationFrame(this.animationId);
     window.removeEventListener('resize', this._onResize);

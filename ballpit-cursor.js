@@ -150,6 +150,22 @@ class WebGLBallpitCursor {
   }
   
   /**
+   * Set the volume for ball collisions
+   * 
+   * @param {number} volume - Volume level (0.0 to 1.0)
+   * 
+   * @example
+   * ballpit.setVolume(0.5);
+   * 
+   * @public
+   */
+  setVolume(volume) {
+    if (this.soundEngine) {
+      this.soundEngine.setVolume(volume);
+    }
+  }
+
+  /**
    * Enable sound effects for ball collisions
    * 
    * @example
