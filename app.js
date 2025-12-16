@@ -615,8 +615,8 @@ document.addEventListener("DOMContentLoaded", () => {
   
   function updateMuteButton(isMuted) {
     setIcon(2, 0, {
-      symbol: isMuted ? "unmute" : "mute",
-      displayValue: isMuted ? "Unmute Audio" : "Mute Audio",
+      symbol: isMuted ? "soundOff" : "soundOn",
+      displayValue: isMuted ? "Sound Off" : "Sound On",
       type: "action",
       active: isMuted,
     }, muteButtonCallback);
@@ -625,6 +625,6 @@ document.addEventListener("DOMContentLoaded", () => {
   if (typeof setIcon !== 'undefined') {
     updateMuteButton(false);
   } else {
-    console.warn("[Mute Button] setIcon not available - cannot create mute button");
+    console.log("[Mute Button] setIcon not available - cannot create mute button");
   }
 });
