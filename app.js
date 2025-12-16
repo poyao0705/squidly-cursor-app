@@ -498,18 +498,23 @@ document.addEventListener("DOMContentLoaded", () => {
   // STEP 1: Implement Volume Sync with System Settings
   // -----------------------------------------------------------------------
   
-  // 1. Get initial volume from host settings
+  // 1. Determine volume settings path based on user type
+  // Use session_info.user (e.g., "host" or "participant") to construct the key
+  const userType = (typeof session_info !== 'undefined' && session_info.user) ? session_info.user : 'host';
+  const volumePath = `${userType}/volume/level`;
+
+  // 2. Get initial volume
   if (window.getSettings) {
-    window.getSettings("host/volume/level", (value) => {
+    window.getSettings(volumePath, (value) => {
       // Volume is 0-100, convert to 0-1
       window.cursorApp.appVolume = (typeof value === 'number' ? value : 70) / 100;
       window.cursorApp.updateAppVolume();
     });
   }
 
-  // 2. Listen for volume changes
+  // 3. Listen for volume changes
   if (window.addSettingsListener) {
-    window.addSettingsListener("host/volume/level", (value) => {
+    window.addSettingsListener(volumePath, (value) => {
       // Volume is 0-100, convert to 0-1
       window.cursorApp.appVolume = (typeof value === 'number' ? value : 70) / 100;
       window.cursorApp.updateAppVolume();
