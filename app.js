@@ -54,7 +54,7 @@ const CURSOR_TYPE_METHODS = {
 
 // Initialize the default cursor type in Firebase
 // This sets the initial state that all users will see when the app loads
-firebaseSet("cursor-app/currentType", "cursor-app/ballpit");
+SquidlyAPI.firebaseSet("cursor-app/currentType", "cursor-app/ballpit");
 
 
 /**
@@ -151,7 +151,7 @@ window.cursorApp = {
       
       // Only send message to parent if we're not syncing (avoid infinite loop)
       if (!this.syncingFromParent) {
-        firebaseSet("cursor-app/currentType", type);
+        SquidlyAPI.firebaseSet("cursor-app/currentType", type);
       }
     }
   },
@@ -168,7 +168,7 @@ window.cursorApp = {
    */
   requestCursorSwitch: function(cursorType) {
     if (cursorType) {
-      firebaseSet("cursor-app/currentType", cursorType);
+      SquidlyAPI.firebaseSet("cursor-app/currentType", cursorType);
     }
   },
 
@@ -504,8 +504,8 @@ document.addEventListener("DOMContentLoaded", () => {
   const volumePath = `${userType}/volume/level`;
 
   // 2. Get initial volume
-  if (window.getSettings) {
-    window.getSettings(volumePath, (value) => {
+  if (SquidlyAPI.getSettings) {
+    SquidlyAPI.getSettings(volumePath, (value) => {
       // Volume is 0-100, convert to 0-1
       window.cursorApp.appVolume = (typeof value === 'number' ? value : 70) / 100;
       window.cursorApp.updateAppVolume();
@@ -513,8 +513,8 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   // 3. Listen for volume changes
-  if (window.addSettingsListener) {
-    window.addSettingsListener(volumePath, (value) => {
+  if (SquidlyAPI.addSettingsListener) {
+    SquidlyAPI.addSettingsListener(volumePath, (value) => {
       // Volume is 0-100, convert to 0-1
       window.cursorApp.appVolume = (typeof value === 'number' ? value : 70) / 100;
       window.cursorApp.updateAppVolume();
@@ -541,7 +541,7 @@ document.addEventListener("DOMContentLoaded", () => {
   // -----------------------------------------------------------------------
   // STEP 4: Listen for cursor type changes via Firebase
   // -----------------------------------------------------------------------
-  firebaseOnValue("cursor-app/currentType", (value) => {
+  SquidlyAPI.firebaseOnValue("cursor-app/currentType", (value) => {
     if (value !== window.cursorApp.currentType) {
       const methodName = CURSOR_TYPE_METHODS[value];
       
@@ -569,7 +569,7 @@ document.addEventListener("DOMContentLoaded", () => {
   // -----------------------------------------------------------------------
   // STEP 5: Register for multi-user cursor updates
   // -----------------------------------------------------------------------
-  addCursorListener((data) => {
+  SquidlyAPI.addCursorListener((data) => {
     window.cursorApp.updatePointerPosition(
       data.x,    
       data.y,    
@@ -581,7 +581,7 @@ document.addEventListener("DOMContentLoaded", () => {
   // -----------------------------------------------------------------------
   // STEP 6: Create the grid icon button for cursor switching
   // -----------------------------------------------------------------------
-  setIcon(1, 0, {
+  SquidlyAPI.setIcon(1, 0, {
     symbol: "change",
     displayValue: "Change Cursor",
     type: "action",
@@ -598,7 +598,7 @@ document.addEventListener("DOMContentLoaded", () => {
   // -----------------------------------------------------------------------
   window.cursorApp.isMuted = false;
 
-  firebaseOnValue("cursor-app/isMuted", (isMuted) => {
+  SquidlyAPI.firebaseOnValue("cursor-app/isMuted", (isMuted) => {
     window.cursorApp.isMuted = !!isMuted;
     
     // Update button appearance
@@ -610,11 +610,11 @@ document.addEventListener("DOMContentLoaded", () => {
 
   const muteButtonCallback = () => {
     const newState = !window.cursorApp.isMuted;
-    firebaseSet("cursor-app/isMuted", newState);
+    SquidlyAPI.firebaseSet("cursor-app/isMuted", newState);
   };
   
   function updateMuteButton(isMuted) {
-    setIcon(2, 0, {
+    SquidlyAPI.setIcon(2, 0, {
       symbol: isMuted ? "soundOff" : "soundOn",
       displayValue: isMuted ? "Sound Off" : "Sound On",
       type: "action",
@@ -622,7 +622,9 @@ document.addEventListener("DOMContentLoaded", () => {
     }, muteButtonCallback);
   }
   
-  if (typeof setIcon !== 'undefined') {
+
+  
+  if (typeof SquidlyAPI.setIcon !== 'undefined') {
     updateMuteButton(false);
   } else {
     console.log("[Mute Button] setIcon not available - cannot create mute button");
