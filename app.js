@@ -527,19 +527,7 @@ document.addEventListener("DOMContentLoaded", () => {
   window.cursorApp._switchToBallpit();
 
   // -----------------------------------------------------------------------
-  // STEP 3: Set up local mouse movement handler
-  // -----------------------------------------------------------------------
-  document.addEventListener("mousemove", (e) => {
-    window.cursorApp.updatePointerPosition(
-      e.clientX,  // Mouse X position in pixels
-      e.clientY,  // Mouse Y position in pixels
-      null,       // No specific color (system will assign)
-      "mouse"     // Identifier for local mouse
-    );
-  });
-
-  // -----------------------------------------------------------------------
-  // STEP 4: Listen for cursor type changes via Firebase
+  // STEP 3: Listen for cursor type changes via Firebase
   // -----------------------------------------------------------------------
   SquidlyAPI.firebaseOnValue("cursor-app/currentType", (value) => {
     if (value !== window.cursorApp.currentType) {
@@ -567,7 +555,7 @@ document.addEventListener("DOMContentLoaded", () => {
   });
 
   // -----------------------------------------------------------------------
-  // STEP 5: Register for multi-user cursor updates
+  // STEP 4: Register for multi-user cursor updates
   // -----------------------------------------------------------------------
   SquidlyAPI.addCursorListener((data) => {
     window.cursorApp.updatePointerPosition(
@@ -579,7 +567,7 @@ document.addEventListener("DOMContentLoaded", () => {
   });
 
   // -----------------------------------------------------------------------
-  // STEP 6: Create the grid icon button for cursor switching
+  // STEP 5: Create the grid icon button for cursor switching
   // -----------------------------------------------------------------------
   SquidlyAPI.setIcon(1, 0, {
     symbol: "change",
