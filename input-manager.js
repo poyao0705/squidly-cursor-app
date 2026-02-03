@@ -128,14 +128,17 @@ class InputManager {
       return;
     }
     
-    if (this.owner._scaleByPixelRatio && this.owner._updatePointerMoveData && this.owner._getOrCreatePointer) {
+    // Use the same render logic as the owner - delegate all coordinate transformation
+    // and pointer updates to the owner's internal methods without separating them
+    if (this.owner._handlePointerInput) {
+      this.owner._handlePointerInput(pointer.x, pointer.y, pointer.color, pointer.id || "default");
+    } else if (this.owner._scaleByPixelRatio && this.owner._updatePointerMoveData && this.owner._getOrCreatePointer) {
+      // Fallback to legacy method if _handlePointerInput not available
       const posX = this.owner._scaleByPixelRatio(pointer.x);
       const posY = this.owner._scaleByPixelRatio(pointer.y);
-      
-      // make sure we're updating the cursor's pointer, not our internal clone
       const ownerPtr = this.owner._getOrCreatePointer(pointer.id || "default", pointer.color);
       this.owner._updatePointerMoveData(ownerPtr, posX, posY, pointer.color);
-      ownerPtr.moved = true; // ensure a splat this frame
+      ownerPtr.moved = true;
     }
   }
 

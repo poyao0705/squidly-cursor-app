@@ -342,28 +342,21 @@ class WebGLMetaBallsCursor {
 
   _onResize(){
     this._updateCanvasPosition();
-    const w = Math.floor((window.frameElement?.clientWidth ?? window.innerWidth) * (window.devicePixelRatio||1));
-    const h = Math.floor((window.frameElement?.clientHeight ?? window.innerHeight) * (window.devicePixelRatio||1));
+    const w = Math.floor(window.innerWidth * (window.devicePixelRatio||1));
+    const h = Math.floor(window.innerHeight * (window.devicePixelRatio||1));
     this.renderer.setSize(w, h);
-    this.canvas.style.width = (window.frameElement?.clientWidth ?? window.innerWidth) + 'px';
-    this.canvas.style.height = (window.frameElement?.clientHeight ?? window.innerHeight) + 'px';
+    this.canvas.style.width = window.innerWidth + 'px';
+    this.canvas.style.height = window.innerHeight + 'px';
     this.program.uniforms.iResolution.value.set(this.gl.drawingBufferWidth, this.gl.drawingBufferHeight, 0);
   }
 
   _updateCanvasPosition() {
-    const iframe = window.frameElement;
-    if (iframe) {
-      const r = iframe.getBoundingClientRect();
-      this.canvas.style.top = r.top + 'px';
-      this.canvas.style.left = r.left + 'px';
-      this.canvas.style.width = r.width + 'px';
-      this.canvas.style.height = r.height + 'px';
-    } else {
-      this.canvas.style.top = '0';
-      this.canvas.style.left = '0';
-      this.canvas.style.width = '100vw';
-      this.canvas.style.height = '100vh';
-    }
+    // Canvas fills the entire viewport (iframe or window)
+    // Coordinates from parent are already iframe-relative via _toIframeCoords()
+    this.canvas.style.top = '0';
+    this.canvas.style.left = '0';
+    this.canvas.style.width = '100vw';
+    this.canvas.style.height = '100vh';
   }
 
   _checkCollisions() {

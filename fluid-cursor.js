@@ -86,35 +86,19 @@ class WebGLFluidCursor {
       release: 0.2,
     });
 
-    // this.exitButton = new GridIcon({
-    //   symbol: "close",
-    //   displayValue: "Exit",
-    //   type: "action",
-    //   events: {
-    //     "access-click": () => this.destroy()
-    //   }
-    // }, "fluid-cursor");
-    // this.exitButton.styles = {
-    //   "width": "25vw",
-    //   "height": "25vh",
-    //   "display": "block",
-    //   "--shadow-color": "transparent",
-    // };
-    // document.body.appendChild(this.exitButton);
-
     /** @type {Object} Simulation configuration with defaults */
     this.config = Object.assign(
       {
-        SIM_RESOLUTION: 128, // Simulation resolution (lower = better performance)
+        SIM_RESOLUTION: 128, // Simulation resolution (higher = sharper motion)
         DYE_RESOLUTION: 1024, // Dye resolution (higher = better quality)
         CAPTURE_RESOLUTION: 512, // Capture resolution for screenshots
-        DENSITY_DISSIPATION: 1, // How quickly density fades (0.1-2.0)
-        VELOCITY_DISSIPATION: 3, // How quickly velocity fades (0.1-5.0)
+        DENSITY_DISSIPATION: 1, // How quickly density fades (faster = cleaner)
+        VELOCITY_DISSIPATION: 1, // How quickly velocity fades (lower = moves easier)
         PRESSURE: 0.1, // Pressure solver iterations
         PRESSURE_ITERATIONS: 20, // Number of pressure projection iterations
-        CURL: 3, // Vorticity confinement strength
-        SPLAT_RADIUS: 0.2, // Size of fluid splashes (0.1-1.0)
-        SPLAT_FORCE: 6000, // Force applied by splashes (1000-10000)
+        CURL: 3, // Vorticity confinement strength (higher = more swirls)
+        SPLAT_RADIUS: 0.1, // Size of fluid splashes (0.1-1.0)
+        SPLAT_FORCE: 1000, // Force applied by splashes (stronger splash)
         SHADING: true, // Enable shading effects
         COLOR_UPDATE_SPEED: 10, // Speed of color transitions (1-20)
         BACK_COLOR: { r: 0, g: 0, b: 0 }, // Background color
@@ -125,7 +109,8 @@ class WebGLFluidCursor {
     );
 
     // Register default mouse pointer
-    this._registerPointer("mouse", "#00ff88");
+    // Use array format for color (strings are ignored by _registerPointer)
+    this._registerPointer("mouse", [0.0, 1.0, 0.533]);
 
     // framebuffers
     this.dye = null;
@@ -140,6 +125,7 @@ class WebGLFluidCursor {
 
     // programs
     this.copyProgram = null;
+    this.displayProgram = null;
     this.clearProgram = null;
     this.splatProgram = null;
     this.advectionProgram = null;
@@ -163,10 +149,10 @@ class WebGLFluidCursor {
     this.ext = ext;
 
     this._initShaders();
-    this._initFramebuffers();
     this._initBlit();
 
-    this.resizeCanvas();
+    this.resizeCanvas();          // ✅ Set drawingBuffer size FIRST
+    this._initFramebuffers();     // ✅ Allocate FBOs at correct resolution
 
     // Add resize listener for window resizing
     this._onResize = this._onResize.bind(this);
@@ -174,19 +160,13 @@ class WebGLFluidCursor {
 
     // Add mouse event listeners
     // Only add mouse events if explicitly requested
-    if (autoMouseEvents) {
-      // Add mouse event listeners
-      this._onMouseMove = this._onMouseMove.bind(this);
-      this._onMouseDown = this._onMouseDown.bind(this);
-      // _onMouseUp is commented out, so skip binding and event listener
-      window.addEventListener("mousemove", this._onMouseMove, {
-        passive: true,
-      });
-      window.addEventListener("mousedown", this._onMouseDown, {
-        passive: true,
-      });
-      // window.addEventListener("mouseup", this._onMouseUp, { passive: true });
-    }
+    // NOTE: mousemove is NOT added here - InputManager already listens for local mouse
+    // if (autoMouseEvents) {
+    //   this._onMouseDown = this._onMouseDown.bind(this);
+    //   window.addEventListener("mousedown", this._onMouseDown, {
+    //     passive: true,
+    //   });
+    // }
 
 
     // Start frame loop immediately and signal readiness
@@ -270,12 +250,8 @@ class WebGLFluidCursor {
 
     // Remove event listeners
     window.removeEventListener("resize", this._onResize);
-    if (this._onMouseMove)
-      window.removeEventListener("mousemove", this._onMouseMove);
-    if (this._onMouseDown)
-      window.removeEventListener("mousedown", this._onMouseDown);
-    // _onMouseUp is commented out, so skip removal
-    // if (this._onMouseUp) window.removeEventListener("mouseup", this._onMouseUp);
+    // if (this._onMouseDown)
+    //   window.removeEventListener("mousedown", this._onMouseDown);
 
     // Clear pointer maps before destroying canvas
     this.pointers = [];
@@ -300,24 +276,13 @@ class WebGLFluidCursor {
     this.canvas = null;
   }
 
-  // === Event handlers ======================================================
-
-  _onMouseMove(e, id = "default") {
-    this.inputManager.updatePointerPosition(e.clientX, e.clientY, null, id);
-  }
-
-  _onMouseDown(e, id = "default") {
-    const pointer = this._getOrCreatePointer(id);
-    const posX = this._scaleByPixelRatio(e.clientX);
-    const posY = this._scaleByPixelRatio(e.clientY);
-    this._updatePointerDownData(pointer, -1, posX, posY);
-    this._clickSplat(pointer);
-  }
-
-  //   _onMouseUp(e, id = "default") {
-  //     const pointer = this._getOrCreatePointer("mouse", id);
-  //     this._updatePointerUpData(pointer);
-  //   }
+  // _onMouseDown(e) {
+  //   const pointer = this._getOrCreatePointer("mouse");
+  //   const posX = this._scaleByPixelRatio(e.clientX);
+  //   const posY = this._scaleByPixelRatio(e.clientY);
+  //   this._updatePointerDownData(pointer, -1, posX, posY);
+  //   this._clickSplat(pointer);
+  // }
 
   _onResize() {
     // Update canvas position and size
@@ -326,21 +291,12 @@ class WebGLFluidCursor {
   }
 
   _updateCanvasPosition() {
-    const iframe = window.frameElement;
-    if (iframe) {
-      // Update position relative to iframe
-      const iframeRect = iframe.getBoundingClientRect();
-      this.canvas.style.top = iframeRect.top + "px";
-      this.canvas.style.left = iframeRect.left + "px";
-      this.canvas.style.width = iframeRect.width + "px";
-      this.canvas.style.height = iframeRect.height + "px";
-    } else {
-      // Fallback to full window
-      this.canvas.style.top = "0";
-      this.canvas.style.left = "0";
-      this.canvas.style.width = "100vw";
-      this.canvas.style.height = "100vh";
-    }
+    // Canvas fills the entire viewport (iframe or window)
+    // Coordinates from parent are already iframe-relative via _toIframeCoords()
+    this.canvas.style.top = "0";
+    this.canvas.style.left = "0";
+    this.canvas.style.width = "100vw";
+    this.canvas.style.height = "100vh";
   }
 
   // === Canvas & GL init ====================================================
@@ -352,24 +308,12 @@ class WebGLFluidCursor {
     c.style.zIndex = "9999";
     c.style.background = "transparent";
 
-    // Check if we're in an iframe and position accordingly
-    const iframe = window.frameElement;
-    if (iframe) {
-      // Position relative to iframe
-      const iframeRect = iframe.getBoundingClientRect();
-      c.style.top = iframeRect.top + "px";
-      c.style.left = iframeRect.left + "px";
-      c.style.width = iframeRect.width + "px";
-      c.style.height = iframeRect.height + "px";
-    } else {
-      // Fallback to full window
-      c.style.top = "0";
-      c.style.left = "0";
-      c.style.width = "100vw";
-      c.style.height = "100vh";
-    }
+    // Canvas fills the entire viewport (iframe or window)
+    // Coordinates from parent are already iframe-relative via _toIframeCoords()
+    c.style.inset = "0";
+    c.style.width = "100vw";
+    c.style.height = "100vh";
 
-    // Don't modify the container's position - append to body instead
     document.body.appendChild(c);
     this.canvas = c;
   }
@@ -381,7 +325,7 @@ class WebGLFluidCursor {
       stencil: false,
       antialias: false,
       preserveDrawingBuffer: false,
-      premultipliedAlpha: false,
+      premultipliedAlpha: true,
     };
     let gl = canvas.getContext("webgl2", params);
     const isWebGL2 = !!gl;
@@ -508,7 +452,7 @@ class WebGLFluidCursor {
     this.gl.shaderSource(shader, source);
     this.gl.compileShader(shader);
     if (!this.gl.getShaderParameter(shader, this.gl.COMPILE_STATUS)) {
-      // Shader compilation failed
+      console.error("Shader compilation failed:", this.gl.getShaderInfoLog(shader));
     }
     return shader;
   }
@@ -532,7 +476,7 @@ class WebGLFluidCursor {
 
     this.gl.linkProgram(program);
     if (!this.gl.getProgramParameter(program, this.gl.LINK_STATUS)) {
-      // Program linking failed
+      console.error("Program linking failed:", this.gl.getProgramInfoLog(program));
     }
     return program;
   }
@@ -567,19 +511,69 @@ class WebGLFluidCursor {
         `
     );
 
+    // Pure identity copy shader - used for FBO resize/copy operations only
     const copyShader = this._compileShader(
       this.gl.FRAGMENT_SHADER,
       `
-          precision mediump float; precision mediump sampler2D;
+          precision mediump float;
+          precision mediump sampler2D;
           varying highp vec2 vUv;
           uniform sampler2D uTexture;
+
           void main () {
-            vec3 rgb = texture2D(uTexture, vUv).rgb;
-            // Alpha = brightness; black => alpha 0, bright dye => alpha ~1
-            float a = clamp(max(max(rgb.r, rgb.g), rgb.b), 0.0, 1.0);
-            gl_FragColor = vec4(rgb, a);
+              gl_FragColor = texture2D(uTexture, vUv);
           }
         `
+    );
+
+    // Display shader with shading and alpha-from-brightness - used for final screen render
+    const displayShader = this._compileShader(
+      this.gl.FRAGMENT_SHADER,
+      `
+          precision highp float;
+          precision highp sampler2D;
+          varying vec2 vUv;
+          varying vec2 vL;
+          varying vec2 vR;
+          varying vec2 vT;
+          varying vec2 vB;
+          uniform sampler2D uTexture;
+          uniform vec2 texelSize;
+
+          void main () {
+              vec3 c = texture2D(uTexture, vUv).rgb;
+              
+              #ifdef SHADING
+              // --- SHADING LOGIC ---
+              // 1. Get neighboring pixel colors
+              vec3 lc = texture2D(uTexture, vL).rgb;
+              vec3 rc = texture2D(uTexture, vR).rgb;
+              vec3 tc = texture2D(uTexture, vT).rgb;
+              vec3 bc = texture2D(uTexture, vB).rgb;
+
+              // 2. Calculate the "Slope" (gradient) of the fluid height
+              float dx = length(rc) - length(lc);
+              float dy = length(tc) - length(bc);
+
+              // 3. Calculate Surface Normal (direction the fluid is facing)
+              vec3 n = normalize(vec3(dx, dy, length(texelSize)));
+              
+              // 4. Calculate Lighting (Dot product of Normal and Light direction)
+              vec3 l = vec3(0.0, 0.0, 1.0); // Light coming from screen
+              float diffuse = clamp(dot(n, l) + 0.7, 0.7, 1.0);
+              
+              // 5. Apply Light
+              c *= diffuse;
+              #endif
+
+              // 6. Set Alpha based on max brightness
+              float a = max(c.r, max(c.g, c.b));
+              
+              // Premultiplied alpha output for gl.ONE, gl.ONE_MINUS_SRC_ALPHA blend mode
+              gl_FragColor = vec4(c, a);
+          }
+        `,
+      this.config.SHADING ? ["SHADING"] : null
     );
 
     const clearShader = this._compileShader(
@@ -599,9 +593,18 @@ class WebGLFluidCursor {
           varying vec2 vUv;
           uniform sampler2D uTarget; uniform float aspectRatio; uniform vec3 color;
           uniform vec2 point; uniform float radius;
+          
           void main () {
             vec2 p = vUv - point.xy; p.x *= aspectRatio;
-            vec3 splat = exp(-dot(p,p)/radius) * color;
+            
+            // --- THE FIX: SHARPER CURVE ---
+            // Raising the gaussian to a power (e.g. 3.0) makes the peak narrower 
+            // and the falloff faster.
+            // float shape = exp(-dot(p,p)/radius);
+            // vec3 splat = pow(shape, 2.0) * color; 
+            vec3 splat = exp(-dot(p,p) / radius) * color;
+
+            
             vec3 base = texture2D(uTarget, vUv).xyz;
             gl_FragColor = vec4(base + splat, 1.0);
           }
@@ -728,6 +731,8 @@ class WebGLFluidCursor {
 
     this.copyProgram = mk(copyShader);
     this.copyProgram.uniforms = this._getUniforms(this.copyProgram.program);
+    this.displayProgram = mk(displayShader);
+    this.displayProgram.uniforms = this._getUniforms(this.displayProgram.program);
     this.clearProgram = mk(clearShader);
     this.clearProgram.uniforms = this._getUniforms(this.clearProgram.program);
     this.splatProgram = mk(splatShader);
@@ -990,26 +995,17 @@ class WebGLFluidCursor {
   _calcDeltaTime() {
     const now = Date.now();
     let dt = (now - this.lastUpdateTime) / 1000;
-    dt = Math.min(dt, 0.016666); // ~60fps clamp
+    dt = Math.min(dt, 0.033); // ~60fps clamp
     this.lastUpdateTime = now;
     return dt;
   }
 
   resizeCanvas() {
-    // Check if we're in an iframe and size accordingly
-    const iframe = window.frameElement;
-    let w, h;
-
-    if (iframe) {
-      // Size to iframe dimensions
-      const iframeRect = iframe.getBoundingClientRect();
-      w = this._scaleByPixelRatio(iframeRect.width);
-      h = this._scaleByPixelRatio(iframeRect.height);
-    } else {
-      // Fallback to window dimensions
-      w = this._scaleByPixelRatio(window.innerWidth);
-      h = this._scaleByPixelRatio(window.innerHeight);
-    }
+    // Use canvas bounding rect - more reliable than window dimensions,
+    // especially when canvas isn't fullscreen or inside iframes
+    const rect = this.canvas.getBoundingClientRect();
+    const w = this._scaleByPixelRatio(rect.width);
+    const h = this._scaleByPixelRatio(rect.height);
 
     if (this.canvas.width !== w || this.canvas.height !== h) {
       this.canvas.width = w;
@@ -1180,21 +1176,37 @@ class WebGLFluidCursor {
 
   _render(target) {
     const gl = this.gl;
-    gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+    
+    // Premultiplied alpha blend mode - works with vec4(c, a) output
+    gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
     gl.enable(gl.BLEND);
-    // display dye
-    this.copyProgram.bind(gl);
-    gl.uniform1i(this.copyProgram.uniforms.uTexture, this.dye.read.attach(0));
+
+    // Use display program for final screen render (has shading + alpha logic)
+    this.displayProgram.bind(gl);
+    
+    // Set texel size for shading calculations based on drawing buffer dimensions
+    gl.uniform2f(
+      this.displayProgram.uniforms.texelSize, 
+      1.0 / gl.drawingBufferWidth, 
+      1.0 / gl.drawingBufferHeight
+    );
+    
+    gl.uniform1i(this.displayProgram.uniforms.uTexture, this.dye.read.attach(0));
     this.blit(target);
   }
 
   // === Splatting & pointer helpers ========================================
 
   _splatPointer(pointer) {
-    const dx = pointer.deltaX * this.config.SPLAT_FORCE;
-    const dy = pointer.deltaY * this.config.SPLAT_FORCE;
-    this._splat(pointer.texcoordX, pointer.texcoordY, dx, dy, pointer.color);
-  }
+    const minDim = Math.min(this.canvas.width, this.canvas.height);
+    const forceScale = minDim / 1000; // 1000px baseline feel
+
+    const dx = pointer.deltaX * this.config.SPLAT_FORCE * forceScale;
+    const dy = pointer.deltaY * this.config.SPLAT_FORCE * forceScale;
+
+  this._splat(pointer.texcoordX, pointer.texcoordY, dx, dy, pointer.color);
+}
+
 
   _splat(x, y, dx, dy, color) {
     const gl = this.gl;
@@ -1256,6 +1268,27 @@ class WebGLFluidCursor {
     pointer.deltaX = 0;
     pointer.deltaY = 0;
     pointer.color = this._generateColor();
+  }
+
+  /**
+   * Unified pointer input handler - applies the same render logic for all input
+   * Consolidates coordinate scaling, pointer creation, and update in one place
+   *
+   * @param {number} x - X coordinate in client pixels
+   * @param {number} y - Y coordinate in client pixels
+   * @param {Array|null} color - RGB color array or null
+   * @param {string} id - Pointer ID
+   * @private
+   */
+  _handlePointerInput(x, y, color, id = "default") {
+    if (!this.canvas) return;
+
+    const posX = this._scaleByPixelRatio(x);
+    const posY = this._scaleByPixelRatio(y);
+    const pointer = this._getOrCreatePointer(id, color);
+    
+    this._updatePointerMoveData(pointer, posX, posY, color);
+    pointer.moved = true;
   }
 
   _updatePointerMoveData(pointer, posX, posY, color) {
