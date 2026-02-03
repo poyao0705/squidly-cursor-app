@@ -92,8 +92,8 @@ class WebGLFluidCursor {
         SIM_RESOLUTION: 128, // Simulation resolution (higher = sharper motion)
         DYE_RESOLUTION: 1024, // Dye resolution (higher = better quality)
         CAPTURE_RESOLUTION: 512, // Capture resolution for screenshots
-        DENSITY_DISSIPATION: 1, // How quickly density fades (higher = faster fade)
-        VELOCITY_DISSIPATION: 1, // How quickly velocity fades (higher = faster fade)
+        DENSITY_DISSIPATION: 3.5, // How quickly density fades (higher = faster fade)
+        VELOCITY_DISSIPATION: 2, // How quickly velocity fades (higher = faster fade)
         PRESSURE: 0.1, // Pressure solver iterations
         PRESSURE_ITERATIONS: 20, // Number of pressure projection iterations
         CURL: 1, // Vorticity confinement strength (higher = more swirls)
