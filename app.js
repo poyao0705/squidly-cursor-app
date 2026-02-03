@@ -558,6 +558,12 @@ document.addEventListener("DOMContentLoaded", () => {
   // STEP 4: Register for multi-user cursor updates
   // -----------------------------------------------------------------------
   SquidlyAPI.addCursorListener((data) => {
+    // Skip local mouse for fluid cursor - it handles local mouse directly
+    // to avoid coordinate round-trip transformation issues
+    if (data.source === 'local' && data.user.endsWith('-mouse') && 
+        window.cursorApp.currentType === 'cursor-app/fluid') {
+      return;
+    }
     window.cursorApp.updatePointerPosition(
       data.x,    
       data.y,    

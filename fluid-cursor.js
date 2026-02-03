@@ -92,13 +92,13 @@ class WebGLFluidCursor {
         SIM_RESOLUTION: 128, // Simulation resolution (higher = sharper motion)
         DYE_RESOLUTION: 1024, // Dye resolution (higher = better quality)
         CAPTURE_RESOLUTION: 512, // Capture resolution for screenshots
-        DENSITY_DISSIPATION: 1, // How quickly density fades (faster = cleaner)
-        VELOCITY_DISSIPATION: 1, // How quickly velocity fades (lower = moves easier)
+        DENSITY_DISSIPATION: 4, // How quickly density fades (faster = cleaner)
+        VELOCITY_DISSIPATION: 2, // How quickly velocity fades (lower = moves easier)
         PRESSURE: 0.1, // Pressure solver iterations
         PRESSURE_ITERATIONS: 20, // Number of pressure projection iterations
-        CURL: 3, // Vorticity confinement strength (higher = more swirls)
-        SPLAT_RADIUS: 0.1, // Size of fluid splashes (0.1-1.0)
-        SPLAT_FORCE: 1000, // Force applied by splashes (stronger splash)
+        CURL: 1.5, // Vorticity confinement strength (higher = more swirls)
+        SPLAT_RADIUS: 0.12, // Size of fluid splashes (0.1-1.0)
+        SPLAT_FORCE: 1200, // Force applied by splashes (stronger splash)
         SHADING: true, // Enable shading effects
         COLOR_UPDATE_SPEED: 10, // Speed of color transitions (1-20)
         BACK_COLOR: { r: 0, g: 0, b: 0 }, // Background color
@@ -158,15 +158,13 @@ class WebGLFluidCursor {
     this._onResize = this._onResize.bind(this);
     window.addEventListener("resize", this._onResize);
 
-    // Add mouse event listeners
-    // Only add mouse events if explicitly requested
-    // NOTE: mousemove is NOT added here - InputManager already listens for local mouse
-    // if (autoMouseEvents) {
-    //   this._onMouseDown = this._onMouseDown.bind(this);
-    //   window.addEventListener("mousedown", this._onMouseDown, {
-    //     passive: true,
-    //   });
-    // }
+    // Add direct local mouse listener to avoid coordinate round-trip transformation
+    // Local mouse goes: iframe -> parent -> normalized -> parent -> iframe (4 transforms)
+    // This causes precision loss. By listening directly, we skip the round-trip.
+    this._onLocalMouseMove = (e) => {
+      this._handlePointerInput(e.clientX, e.clientY, null, "local-mouse");
+    };
+    window.addEventListener("mousemove", this._onLocalMouseMove, { passive: true });
 
 
     // Start frame loop immediately and signal readiness
@@ -250,8 +248,9 @@ class WebGLFluidCursor {
 
     // Remove event listeners
     window.removeEventListener("resize", this._onResize);
-    // if (this._onMouseDown)
-    //   window.removeEventListener("mousedown", this._onMouseDown);
+    if (this._onLocalMouseMove) {
+      window.removeEventListener("mousemove", this._onLocalMouseMove);
+    }
 
     // Clear pointer maps before destroying canvas
     this.pointers = [];
@@ -995,7 +994,7 @@ class WebGLFluidCursor {
   _calcDeltaTime() {
     const now = Date.now();
     let dt = (now - this.lastUpdateTime) / 1000;
-    dt = Math.min(dt, 0.033); // ~60fps clamp
+    dt = Math.min(dt, 1 / 60); // ~60fps clamp
     this.lastUpdateTime = now;
     return dt;
   }
