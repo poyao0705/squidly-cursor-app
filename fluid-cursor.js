@@ -985,7 +985,7 @@ class WebGLFluidCursor {
     const dt = this._calcDeltaTime();
     if (this.resizeCanvas()) this._initFramebuffers();
     this._updateColors(dt);
-    this._applyInputs();
+    this._applyInputs(dt);
     this._step(dt);
     this._render(null);
     this.animationId = requestAnimationFrame(() => this._updateFrame());
@@ -1022,9 +1022,36 @@ class WebGLFluidCursor {
     }
   }
 
-  _applyInputs() {
+  _applyInputs(dt) {
     this.pointers.forEach((p) => {
-      if (p.moved) {
+      // SMOOTHING LOGIC:
+      // If smoothing is enabled (factor > 0), we interpolate current position towards target.
+      // This turns jerky/low-freq updates into smooth continuous movement.
+      if (p.smoothingFactor > 0 && (p.targetTexcoordX !== null)) {
+        // Interpolate towards target
+        // Lerp formula: current + (target - current) * (1 - exp(-speed * dt))
+        // Using simple lerp for performance as dt is small and stable enough here
+        const lerpSpeed = Math.min(1.0, dt * p.smoothingFactor);
+        
+        // Update current position smoothy
+        p.prevTexcoordX = p.texcoordX;
+        p.prevTexcoordY = p.texcoordY;
+        
+        p.texcoordX += (p.targetTexcoordX - p.texcoordX) * lerpSpeed;
+        p.texcoordY += (p.targetTexcoordY - p.texcoordY) * lerpSpeed;
+        
+        // Calculate delta based on the SMOOTHED movement
+        p.deltaX = this._correctDeltaX(p.texcoordX - p.prevTexcoordX);
+        p.deltaY = this._correctDeltaY(p.texcoordY - p.prevTexcoordY);
+        
+        // Mark as moved if there's significant change
+        // We use a small threshold to stop processing when very close to target
+        const dist = Math.abs(p.deltaX) + Math.abs(p.deltaY);
+        if (dist > 0.0001) {
+          this._splatPointer(p);
+        }
+      } else if (p.moved) {
+        // Standard instantaneous input (Mouse)
         p.moved = false;
         this._splatPointer(p);
       }
@@ -1253,6 +1280,10 @@ class WebGLFluidCursor {
       moved: false,
       color: null,
       type: type,
+      // Smoothing properties
+      smoothingFactor: id.includes("eye") ? 10.0 : 0, // Enable smoothing for eye trackers
+      targetTexcoordX: null,
+      targetTexcoordY: null
     };
   }
 
@@ -1294,6 +1325,24 @@ class WebGLFluidCursor {
     // Safety check - ensure canvas exists
     if (!this.canvas) {
       return;
+    }
+
+    // SMOOTHING CHECK:
+    // If smoothing is enabled, we update the TARGET, not the actual position.
+    // The _applyInputs loop will handle moving the actual position towards target.
+    if (pointer.smoothingFactor > 0) {
+        pointer.targetTexcoordX = posX / this.canvas.width;
+        pointer.targetTexcoordY = 1.0 - posY / this.canvas.height;
+        
+        // Initialize position on first update to avoid flying in from (0,0)
+        if (pointer.targetTexcoordX !== null && pointer.texcoordX === 0 && pointer.texcoordY === 0) {
+             pointer.texcoordX = pointer.targetTexcoordX;
+             pointer.texcoordY = pointer.targetTexcoordY;
+        }
+        
+        // Update color immediately
+        pointer.color = color || pointer.color || this._generateColor();
+        return; // Skip standard update
     }
 
     pointer.prevTexcoordX = pointer.texcoordX;
