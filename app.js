@@ -24,9 +24,9 @@
  * 
  * CURSOR TYPES AVAILABLE:
  * -----------------------
- * - cursor-app/ballpit: 3D ball physics simulation with THREE.js
- * - cursor-app/fluid: Realistic fluid dynamics with WebGL shaders
- * - cursor-app/metaballs: Organic blob effects with smooth metaball rendering
+ * - ballpit: 3D ball physics simulation with THREE.js
+ * - fluid: Realistic fluid dynamics with WebGL shaders
+ * - metaballs: Organic blob effects with smooth metaball rendering
  * 
  * @author Po-Yao Huang
  * @version 1.0.1
@@ -47,14 +47,14 @@ import { WebGLFluidCursor, WebGLBallpitCursor, WebGLMetaBallsCursor } from './in
  * @constant {Object.<string, string>}
  */
 const CURSOR_TYPE_METHODS = {
-  "cursor-app/ballpit": "_switchToBallpit",
-  "cursor-app/fluid": "_switchToFluid",
-  "cursor-app/metaballs": "_switchToMetaBalls"
+  "ballpit": "_switchToBallpit",
+  "fluid": "_switchToFluid",
+  "metaballs": "_switchToMetaBalls"
 };
 
 // Initialize the default cursor type in Firebase
 // This sets the initial state that all users will see when the app loads
-SquidlyAPI.firebaseSet("cursor-app/currentType", "cursor-app/ballpit");
+SquidlyAPI.firebaseSet("currentType", "ballpit");
 
 
 /**
@@ -104,7 +104,7 @@ window.cursorApp = {
   /**
    * Current active cursor type identifier
    * @type {string|null}
-   * @example "cursor-app/ballpit", "cursor-app/fluid", "cursor-app/metaballs"
+   * @example "ballpit", "fluid", "metaballs"
    */
   currentType: null,
   
@@ -151,7 +151,7 @@ window.cursorApp = {
       
       // Only send message to parent if we're not syncing (avoid infinite loop)
       if (!this.syncingFromParent) {
-        SquidlyAPI.firebaseSet("cursor-app/currentType", type);
+        SquidlyAPI.firebaseSet("currentType", type);
       }
     }
   },
@@ -163,12 +163,12 @@ window.cursorApp = {
    * (including this one) will receive the update via firebaseOnValue and
    * switch their cursor to match.
    * 
-   * @param {string} cursorType - The cursor type identifier (e.g., "cursor-app/ballpit")
+   * @param {string} cursorType - The cursor type identifier (e.g., "ballpit")
    * @memberof cursorApp
    */
   requestCursorSwitch: function(cursorType) {
     if (cursorType) {
-      SquidlyAPI.firebaseSet("cursor-app/currentType", cursorType);
+      SquidlyAPI.firebaseSet("currentType", cursorType);
     }
   },
 
@@ -195,7 +195,7 @@ window.cursorApp = {
   switchToBallpit: function() {
     // Only send request via Firebase, don't switch locally
     // The actual switch happens when Firebase broadcasts to everyone
-    this.requestCursorSwitch("cursor-app/ballpit");
+    this.requestCursorSwitch("ballpit");
   },
   
   /**
@@ -214,7 +214,7 @@ window.cursorApp = {
   switchToFluid: function() {
     // Only send request via Firebase, don't switch locally
     // The actual switch happens when Firebase broadcasts to everyone
-    this.requestCursorSwitch("cursor-app/fluid");
+    this.requestCursorSwitch("fluid");
   },
 
   /**
@@ -233,7 +233,7 @@ window.cursorApp = {
   switchToMetaBalls: function() {
     // Only send request via Firebase, don't switch locally
     // The actual switch happens when Firebase broadcasts to everyone
-    this.requestCursorSwitch("cursor-app/metaballs");
+    this.requestCursorSwitch("metaballs");
   },
 
   // ========================
@@ -276,8 +276,8 @@ window.cursorApp = {
       
       // Update state directly without sending to Firebase
       // (we're already syncing from Firebase, so no need to send back)
-      this.currentType = "cursor-app/ballpit";
-      document.body.setAttribute('app-type', "cursor-app/ballpit");
+      this.currentType = "ballpit";
+      document.body.setAttribute('app-type', "ballpit");
       this.switching = false;
       
       // Apply current volume setting/mute state to the new cursor
@@ -329,8 +329,8 @@ window.cursorApp = {
       
       // Update state directly without sending to Firebase
       // (we're already syncing from Firebase, so no need to send back)
-      this.currentType = "cursor-app/fluid";
-      document.body.setAttribute('app-type', "cursor-app/fluid");
+      this.currentType = "fluid";
+      document.body.setAttribute('app-type', "fluid");
       this.switching = false;
       
       // Apply current volume setting/mute state to the new cursor
@@ -378,8 +378,8 @@ window.cursorApp = {
       
       // Update state directly without sending to Firebase
       // (we're already syncing from Firebase, so no need to send back)
-      this.currentType = "cursor-app/metaballs";
-      document.body.setAttribute('app-type', "cursor-app/metaballs");
+      this.currentType = "metaballs";
+      document.body.setAttribute('app-type', "metaballs");
       this.switching = false;
       
       // Apply current volume setting/mute state to the new cursor
@@ -529,7 +529,7 @@ document.addEventListener("DOMContentLoaded", () => {
   // -----------------------------------------------------------------------
   // STEP 3: Listen for cursor type changes via Firebase
   // -----------------------------------------------------------------------
-  SquidlyAPI.firebaseOnValue("cursor-app/currentType", (value) => {
+  SquidlyAPI.firebaseOnValue("currentType", (value) => {
     if (value !== window.cursorApp.currentType) {
       const methodName = CURSOR_TYPE_METHODS[value];
       
@@ -561,7 +561,7 @@ document.addEventListener("DOMContentLoaded", () => {
     // Skip local mouse for fluid cursor - it handles local mouse directly
     // to avoid coordinate round-trip transformation issues
     if (data.source === 'local' && data.user.endsWith('-mouse') && 
-        window.cursorApp.currentType === 'cursor-app/fluid') {
+        window.cursorApp.currentType === 'fluid') {
       return;
     }
     window.cursorApp.updatePointerPosition(
@@ -588,11 +588,11 @@ document.addEventListener("DOMContentLoaded", () => {
   });
 
   // -----------------------------------------------------------------------
-  // STEP 7: Create mute/unmute button using cursor-app/isMuted
+  // STEP 7: Create mute/unmute button using isMuted
   // -----------------------------------------------------------------------
   window.cursorApp.isMuted = false;
 
-  SquidlyAPI.firebaseOnValue("cursor-app/isMuted", (isMuted) => {
+  SquidlyAPI.firebaseOnValue("isMuted", (isMuted) => {
     window.cursorApp.isMuted = !!isMuted;
     
     // Update button appearance
@@ -604,7 +604,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
   const muteButtonCallback = () => {
     const newState = !window.cursorApp.isMuted;
-    SquidlyAPI.firebaseSet("cursor-app/isMuted", newState);
+    SquidlyAPI.firebaseSet("isMuted", newState);
   };
   
   function updateMuteButton(isMuted) {
