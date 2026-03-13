@@ -7,7 +7,7 @@
  * 
  * Features:
  * - Multi-pointer input handling (mouse, eye gaze, etc.)
- * - Dynamic ball assignment for multi-user scenarios
+ * - Dynamic user ball spawning for multi-user scenarios
  * - Input prioritization (mouse over eye gaze)
  * - Automatic cleanup of inactive users
  * - Cross-cursor compatibility and unified API
@@ -23,8 +23,9 @@ class InputManager {
    * @param {Object} owner - The cursor instance that owns this InputManager
    * @param {Object} [options={}] - Configuration options
    * @param {string} [options.cursorType='fluid'] - Type of cursor ('fluid' or 'ballpit')
-   * @param {boolean} [options.useBallAssignment=false] - Whether to use ball assignment for eye gaze users
+   * @param {boolean} [options.useBallAssignment=false] - Whether to use ball assignment for users
    * @param {number} [options.inactiveTimeout=5000] - Timeout for inactive users in milliseconds
+   * @param {number} [options.firstUserBallIndex=1] - First ball index to assign to users (set to COUNT in ballpit so user balls live outside the follower pool)
    */
   constructor(owner, options = {}) {
     /** @type {Object} The cursor instance that owns this InputManager */
@@ -35,17 +36,18 @@ class InputManager {
       cursorType: options.cursorType || 'fluid',
       useBallAssignment: options.useBallAssignment || false,
       inactiveTimeout: options.inactiveTimeout || 5000,
+      firstUserBallIndex: options.firstUserBallIndex || 1,
       ...options
     };
 
     /** @type {Map<string, Object>} Internal pointer storage */
     this._pointers = new Map();
     
-    /** @type {Map<string, number>} Ball assignment system for ballpit cursor */
-    this._eyegazeBallIndices = new Map(); // userType -> ballIndex
+    /** @type {Map<string, number>} Ball assignment for ALL users (mouse + remote) in ballpit cursor */
+    this._userBallIndices = new Map(); // userType -> ballIndex
     
-    /** @type {number} Next available ball index (0 reserved for mouse) */
-    this._nextAvailableBallIndex = 1;
+    /** @type {number} Next available ball index — starts at firstUserBallIndex so user balls live beyond the follower pool */
+    this._nextAvailableBallIndex = this.options.firstUserBallIndex;
     
     /** @type {Object} Performance and usage statistics */
     this._stats = {
@@ -97,8 +99,9 @@ class InputManager {
   /**
    * Handle input for ballpit cursor type
    * 
-   * Processes pointer input for ballpit cursor. Handles ball assignment for eye gaze users
-   * when ball assignment is enabled.
+   * Processes pointer input for ballpit cursor. Assigns a dynamic ball index to
+   * ALL users (including mouse) so that every participant gets a dedicated ball
+   * that lives outside the follower pool.
    * 
    * @param {Object} pointer - The pointer object to process
    * @private
@@ -106,8 +109,9 @@ class InputManager {
   _handleBallpitInput(pointer) {
     // For ballpit, we just update the pointer data
     // The owner will handle the actual ball physics
-    // Assign balls to all non-mouse users (eye gaze, host-eye, etc.)
-    if (this.options.useBallAssignment && pointer.id !== "mouse") {
+    // Assign balls to ALL users (mouse + remote) so every user gets a
+    // dedicated ball outside the pre-allocated follower pool
+    if (this.options.useBallAssignment) {
       this._assignBallIndex(pointer.id);
     }
   }
@@ -161,30 +165,35 @@ class InputManager {
         y: 0,
         lastSeen: 0,
         color: color,
-        ballIndex: id === "mouse" ? 0 : null
+        ballIndex: null // Ball index is assigned dynamically for all users
       });
     }
     return this._pointers.get(id);
   }
 
   /**
-   * Assign a unique ball index for eye gaze users
+   * Assign a unique ball index for a user
    * 
-   * Assigns a unique ball index to eye gaze users for the ballpit cursor.
-   * This allows multiple eye gaze users to have their own balls in the simulation.
+   * Assigns a unique ball index to a user for the ballpit cursor.
+   * Applies to ALL users (mouse, eye gaze, remote, etc.) so each person
+   * gets their own dedicated ball outside the follower pool.
    * 
    * @param {string} userType - The user type identifier
    * @private
    */
   _assignBallIndex(userType) {
-    if (!this._eyegazeBallIndices.has(userType)) {
+    if (!this._userBallIndices.has(userType)) {
       const ballIndex = this._nextAvailableBallIndex++;
-      this._eyegazeBallIndices.set(userType, ballIndex);
+      this._userBallIndices.set(userType, ballIndex);
       const pointer = this._pointers.get(userType);
       if (pointer) pointer.ballIndex = ballIndex;
       console.log(`Assigned ball index ${ballIndex} to ${userType}`);
+      // Notify owner so it can initialise the new ball slot
+      if (this.owner.onUserBallSpawned) {
+        this.owner.onUserBallSpawned(userType, ballIndex);
+      }
     }
-    return this._eyegazeBallIndices.get(userType);
+    return this._userBallIndices.get(userType);
   }
 
   /**
@@ -197,11 +206,15 @@ class InputManager {
    * @private
    */
   _releaseBallIndex(userType) {
-    if (this._eyegazeBallIndices.has(userType)) {
-      const ballIndex = this._eyegazeBallIndices.get(userType);
-      this._eyegazeBallIndices.delete(userType);
+    if (this._userBallIndices.has(userType)) {
+      const ballIndex = this._userBallIndices.get(userType);
+      this._userBallIndices.delete(userType);
       this._pointers.delete(userType);
       console.log(`Released ball index ${ballIndex} from ${userType}`);
+      // Notify owner so it can hide/clean up the ball slot
+      if (this.owner.onUserBallRemoved) {
+        this.owner.onUserBallRemoved(userType, ballIndex);
+      }
     }
   }
 
@@ -255,16 +268,25 @@ class InputManager {
   }
 
   /**
-   * Get eye gaze ball indices mapping
+   * Get user ball indices mapping
    * 
-   * Returns a copy of the current ball index assignments for eye gaze users.
+   * Returns a copy of the current ball index assignments for all users (mouse + remote).
    * Useful for debugging and external monitoring of ball assignments.
    * 
    * @returns {Map<string, number>} Map of userType -> ballIndex
    * @public
    */
+  getUserBallIndices() {
+    return new Map(this._userBallIndices);
+  }
+
+  /**
+   * @deprecated Use getUserBallIndices() instead
+   * @returns {Map<string, number>}
+   * @public
+   */
   getEyegazeBallIndices() {
-    return new Map(this._eyegazeBallIndices);
+    return this.getUserBallIndices();
   }
 
   /**
@@ -398,8 +420,8 @@ class InputManager {
     return {
       totalPointers: this._pointers.size,
       mouseActive: this._pointers.has("mouse"),
-      eyegazeUsers: this._eyegazeBallIndices.size,
-      activeBallIndices: Array.from(this._eyegazeBallIndices.values()),
+      userBalls: this._userBallIndices.size,
+      activeBallIndices: Array.from(this._userBallIndices.values()),
       totalUpdates: this._stats.totalUpdates,
       lastCleanup: this._stats.lastCleanup,
       timeSinceLastCleanup: now - this._stats.lastCleanup,
@@ -430,8 +452,8 @@ class InputManager {
    */
   reset() {
     this._pointers.clear();
-    this._eyegazeBallIndices.clear();
-    this._nextAvailableBallIndex = 1;
+    this._userBallIndices.clear();
+    this._nextAvailableBallIndex = this.options.firstUserBallIndex;
     this._stats = {
       totalUpdates: 0,
       lastCleanup: performance.now()

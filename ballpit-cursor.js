@@ -54,26 +54,12 @@ class WebGLBallpitCursor {
     
     /** @type {boolean} Whether the cursor is ready for use */
     this.ready = false;
-  
-    /** @type {Object} Input manager for handling multiple input sources */
-    this.inputManager = new InputManager(this, {
-      cursorType: 'ballpit',
-      useBallAssignment: true,
-      inactiveTimeout: 5000
-    });
-
-    /** @type {CollisionSoundEngine|null} Sound engine for collision effects */
-    this.soundEngine = new CollisionSoundEngine({
-      masterGain: 0.5,
-      collisionSoundUrl: configOverrides.collisionSoundUrl || './sfx/glass-clink.mp3',
-      soundCooldown: 80,
-      soundEnabled: true,
-    });
 
     /** @type {Object} Physics and rendering configuration */
     this.config = Object.assign(
       {
-        COUNT: 50,                    // Number of balls in the simulation
+        COUNT: 50,                    // Number of ambient follower balls in the simulation
+        MAX_USER_BALLS: 10,          // Max simultaneous user balls (mouse + remote users)
         MIN_SIZE: 0.6,               // Minimum ball size (0.1-2.0)
         MAX_SIZE: 1.2,               // Maximum ball size (0.5-3.0)
         GRAVITY: 0.02,               // Gravity strength (0.01-0.1)
@@ -93,6 +79,27 @@ class WebGLBallpitCursor {
       },
       configOverrides || {}
     );
+
+    /** @type {Object} Input manager for handling multiple input sources */
+    // firstUserBallIndex = COUNT so that dynamically spawned user balls live
+    // *beyond* the pre-allocated follower pool and never steal a follower slot.
+    this.inputManager = new InputManager(this, {
+      cursorType: 'ballpit',
+      useBallAssignment: true,
+      inactiveTimeout: 5000,
+      firstUserBallIndex: this.config.COUNT
+    });
+
+    /** @type {Map<number, Object>} Per-user-ball state (e.g. first-frame teleport flag) */
+    this._userBallState = new Map(); // ballIndex -> { needsTeleport }
+
+    /** @type {CollisionSoundEngine|null} Sound engine for collision effects */
+    this.soundEngine = new CollisionSoundEngine({
+      masterGain: 0.5,
+      collisionSoundUrl: configOverrides.collisionSoundUrl || './sfx/glass-clink.mp3',
+      soundCooldown: 80,
+      soundEnabled: true,
+    });
   
         // Canvas overlay
         this.canvas = document.createElement("canvas");
@@ -286,14 +293,16 @@ class WebGLBallpitCursor {
         // Bounds (updated by _resize based on FOV)
         this.bounds = { x: 5, y: 5, z: 2 };
   
-        // Physics buffers
+        // Physics buffers — extended to hold user ball slots beyond the follower pool
         const C = this.config.COUNT;
-        this.positions = new Float32Array(3 * C);
-        this.velocities = new Float32Array(3 * C);
-        this.sizes = new Float32Array(C);
+        const MAX_USER = this.config.MAX_USER_BALLS;
+        const TOTAL = C + MAX_USER;
+        this.positions = new Float32Array(3 * TOTAL);
+        this.velocities = new Float32Array(3 * TOTAL);
+        this.sizes = new Float32Array(TOTAL);
         this.center = new this.THREE.Vector3(0, 0, 0);
   
-        // Seed particles
+        // Seed follower particles (indices 0 … C-1)
         for (let i = 0; i < C; i++) {
           const b = 3 * i;
           this.positions[b + 0] = this.THREE.MathUtils.randFloatSpread(2 * this.bounds.x);
@@ -302,10 +311,13 @@ class WebGLBallpitCursor {
           this.velocities[b + 0] = this.THREE.MathUtils.randFloatSpread(0.2);
           this.velocities[b + 1] = this.THREE.MathUtils.randFloatSpread(0.2);
           this.velocities[b + 2] = this.THREE.MathUtils.randFloatSpread(0.2);
-          this.sizes[i] =
-            i === 0 && this.config.FOLLOW_CURSOR
-              ? Math.max(this.config.MAX_SIZE, 0.36)
-              : this.THREE.MathUtils.randFloat(this.config.MIN_SIZE, this.config.MAX_SIZE);
+          this.sizes[i] = this.THREE.MathUtils.randFloat(this.config.MIN_SIZE, this.config.MAX_SIZE);
+        }
+
+        // User ball slots (indices C … TOTAL-1) start hidden; they are shown
+        // when a user's pointer is active.
+        for (let i = C; i < TOTAL; i++) {
+          this.sizes[i] = 0;
         }
   
         // Instanced spheres
@@ -317,9 +329,9 @@ class WebGLBallpitCursor {
           clearcoatRoughness: 0.05
         });
   
-        this.mesh = new this.THREE.InstancedMesh(geom, mat, C);
+        this.mesh = new this.THREE.InstancedMesh(geom, mat, TOTAL);
         this.mesh.instanceMatrix.setUsage(this.THREE.DynamicDrawUsage);
-        // Color gradient across instances
+        // Color gradient across follower instances
         const palette = this.config.PALETTE.map((h) => new this.THREE.Color(h));
         const lerpColor = (t) => {
           const x = this.THREE.MathUtils.clamp(t, 0, 1) * (palette.length - 1);
@@ -330,6 +342,11 @@ class WebGLBallpitCursor {
         };
         for (let i = 0; i < C; i++) {
           this.mesh.setColorAt(i, lerpColor(i / (C - 1)));
+        }
+        // User ball slots — give each a bright white so they stand out
+        const userBallColor = new this.THREE.Color(0xffffff);
+        for (let i = C; i < TOTAL; i++) {
+          this.mesh.setColorAt(i, userBallColor);
         }
         this.scene.add(this.mesh);
   
@@ -348,8 +365,13 @@ class WebGLBallpitCursor {
             this.inputManager.updatePointerPosition(e.clientX, e.clientY, null, "mouse");
           };
           this._autoMouseLeave = () => {
-            // ease back to origin if following
-            if (this.config.FOLLOW_CURSOR) this.center.set(0, 0, 0);
+            // Hide the mouse user ball when the cursor leaves the window
+            if (this.config.FOLLOW_CURSOR) {
+              const mouseIndex = this.inputManager.getUserBallIndices().get("mouse");
+              if (mouseIndex !== undefined && this.sizes) {
+                this.sizes[mouseIndex] = 0;
+              }
+            }
           };
           window.addEventListener("mousemove", this._autoMouseMove, { passive: true });
           window.addEventListener("mouseleave", this._autoMouseLeave, { passive: true });
@@ -370,6 +392,34 @@ class WebGLBallpitCursor {
   
     // ---------- Audio System ----------
     // Audio system is now handled by BallpitSoundEngine
+
+    // ---------- User ball lifecycle callbacks ----------
+
+    /**
+     * Called by InputManager when a new user ball is dynamically spawned.
+     * Initialises the ball slot and marks it for teleport on the first frame
+     * so it snaps to the user's pointer rather than sliding from (0, 0, 0).
+     *
+     * @param {string} userType - The user type identifier
+     * @param {number} ballIndex - The assigned ball index (≥ COUNT)
+     */
+    onUserBallSpawned(userType, ballIndex) {
+      this._userBallState.set(ballIndex, { needsTeleport: true });
+      // Ball is hidden (size 0) until the first pointer update moves it into view
+      if (this.sizes) this.sizes[ballIndex] = 0;
+    }
+
+    /**
+     * Called by InputManager when a user ball is removed (user disconnected or timed out).
+     * Hides the ball slot immediately.
+     *
+     * @param {string} userType - The user type identifier
+     * @param {number} ballIndex - The ball index being freed
+     */
+    onUserBallRemoved(userType, ballIndex) {
+      this._userBallState.delete(ballIndex);
+      if (this.sizes) this.sizes[ballIndex] = 0;
+    }
 
     // ---------- Input plumbing ----------
     _onPointerInputChanged() {
@@ -416,61 +466,63 @@ class WebGLBallpitCursor {
   
         const bx = this.bounds.x, by = this.bounds.y, bz = Math.max(this.bounds.z, this.config.MAX_SIZE || 1);
         const p = this.positions, v = this.velocities, s = this.sizes;
-  
-        // --- cursor balls: kinematic control
+
+        // Cache user ball indices once per frame to avoid repeated Map allocations
+        const userBallIndices = this.inputManager.getUserBallIndices();
+
+        // --- user balls: kinematic control (indices COUNT … COUNT+MAX_USER_BALLS-1)
+        // These are dynamically spawned balls that live outside the follower pool
+        // and never interfere with the follower indices.
         if (FOLLOW_CURSOR) {
-          // Mouse cursor ball (index 0)
-          p[0] += (this.center.x - p[0]) * LEADER_EASE;
-          p[1] += (this.center.y - p[1]) * LEADER_EASE;
-          p[2] += (0 - p[2]) * LEADER_EASE;
-          v[0] = v[1] = v[2] = 0;
-          this.keyLight.position.set(p[0], p[1], 5);
-          s[0] = Math.max(this.config.MAX_SIZE, 0.36);
-          
-          // Multiple eyegaze cursor balls - each user gets their own ball
-          for (const [userType, ballIndex] of this.inputManager.getEyegazeBallIndices()) {
+          let mouseBallIndex = undefined;
+          for (const [userType, ballIndex] of userBallIndices) {
             if (this.inputManager.hasPointer(userType)) {
-              const eyegazePointer = this.inputManager.getPointer(userType);
-              if (eyegazePointer) {
+              const userPointer = this.inputManager.getPointer(userType);
+              if (userPointer) {
                 const w = window.innerWidth;
                 const h = window.innerHeight;
-                const eyegazeNdc = new this.THREE.Vector2((eyegazePointer.x / w) * 2 - 1, -(eyegazePointer.y / h) * 2 + 1);
-                const eyegazeRaycaster = new this.THREE.Raycaster();
-                eyegazeRaycaster.setFromCamera(eyegazeNdc, this.camera);
-                const eyegazeHit = new this.THREE.Vector3();
+                const ndc = new this.THREE.Vector2((userPointer.x / w) * 2 - 1, -(userPointer.y / h) * 2 + 1);
+                const raycaster = new this.THREE.Raycaster();
+                raycaster.setFromCamera(ndc, this.camera);
+                const hit = new this.THREE.Vector3();
                 this.camera.getWorldDirection(this.followPlane.normal);
-                if (eyegazeRaycaster.ray.intersectPlane(this.followPlane, eyegazeHit)) {
-                  const ei = 3 * ballIndex;
-                  p[ei] += (eyegazeHit.x - p[ei]) * LEADER_EASE;
-                  p[ei + 1] += (eyegazeHit.y - p[ei + 1]) * LEADER_EASE;
-                  p[ei + 2] += (0 - p[ei + 2]) * LEADER_EASE;
-                  v[ei] = v[ei + 1] = v[ei + 2] = 0;
+                if (raycaster.ray.intersectPlane(this.followPlane, hit)) {
+                  const state = this._userBallState.get(ballIndex) || {};
+                  // Teleport on first frame so ball doesn't slide in from (0,0,0)
+                  const ease = state.needsTeleport ? 1.0 : LEADER_EASE;
+                  if (state.needsTeleport) {
+                    state.needsTeleport = false;
+                    this._userBallState.set(ballIndex, state);
+                  }
+                  const bi = 3 * ballIndex;
+                  p[bi]     += (hit.x - p[bi])     * ease;
+                  p[bi + 1] += (hit.y - p[bi + 1]) * ease;
+                  p[bi + 2] += (0     - p[bi + 2]) * ease;
+                  v[bi] = v[bi + 1] = v[bi + 2] = 0;
                   s[ballIndex] = Math.max(this.config.MAX_SIZE, 0.36);
+                  if (userType === "mouse") mouseBallIndex = ballIndex;
                 }
               }
             } else {
-              // Hide eyegaze ball when this user type is not active
+              // Hide user ball when this pointer is not active
               s[ballIndex] = 0;
             }
           }
+          // Key light tracks the mouse user ball (or stays at last position)
+          if (mouseBallIndex !== undefined) {
+            this.keyLight.position.set(p[3 * mouseBallIndex], p[3 * mouseBallIndex + 1], 5);
+          }
         } else {
-          s[0] = 0;
-          // Hide all eyegaze balls
-          for (const ballIndex of this.inputManager.getEyegazeBallIndices().values()) {
+          // Hide all user balls when FOLLOW_CURSOR is disabled
+          for (const ballIndex of userBallIndices.values()) {
             s[ballIndex] = 0;
           }
         }
 
-        // --- pairwise collisions: ONLY followers (skip all cursor balls)
-        const cursorBallIndices = new Set([0]); // Mouse cursor
-        for (const ballIndex of this.inputManager.getEyegazeBallIndices().values()) {
-          cursorBallIndices.add(ballIndex);
-        }
-        
-        for (let i = 1; i < COUNT; i++) {
-          if (cursorBallIndices.has(i)) continue; // Skip cursor balls
+        // --- pairwise collisions: follower balls only (0 … COUNT-1)
+        // No cursor-ball skipping needed — user balls are outside this range.
+        for (let i = 0; i < COUNT; i++) {
           for (let j = i + 1; j < COUNT; j++) {
-            if (cursorBallIndices.has(j)) continue; // Skip cursor balls
             const bi = 3 * i, bj = 3 * j;
             const dx = p[bi] - p[bj], dy = p[bi+1] - p[bj+1], dz = p[bi+2] - p[bj+2];
             const dist = Math.hypot(dx, dy, dz);
@@ -490,15 +542,13 @@ class WebGLBallpitCursor {
           }
         }
 
-        // --- special cursor repulsion pass (one-sided) for all cursor balls
+        // --- repulsion pass: each user ball pushes all follower balls away
         if (FOLLOW_CURSOR) {
-          // Apply repulsion for all cursor balls (mouse + eyegaze)
-          for (const ballIndex of cursorBallIndices) {
+          for (const ballIndex of userBallIndices.values()) {
             const cx = p[3 * ballIndex], cy = p[3 * ballIndex + 1], cz = p[3 * ballIndex + 2];
             const cr = s[ballIndex];
-            if (cr > 0) { // Only if this cursor ball is active
-              for (let i = 1; i < COUNT; i++) {
-                if (cursorBallIndices.has(i)) continue; // Skip other cursor balls
+            if (cr > 0) { // Only if this user ball is active
+              for (let i = 0; i < COUNT; i++) {
                 const b = 3 * i;
                 const dx = p[b] - cx, dy = p[b+1] - cy, dz = p[b+2] - cz;
                 const dist = Math.hypot(dx, dy, dz);
@@ -523,7 +573,8 @@ class WebGLBallpitCursor {
           }
         }
 
-        for (let i = 1; i < COUNT; i++) {
+        // --- physics for follower balls (0 … COUNT-1)
+        for (let i = 0; i < COUNT; i++) {
           const b = 3 * i;
 
           // gravity
@@ -566,12 +617,12 @@ class WebGLBallpitCursor {
   
       // ---------- Render ----------
       _render() {
-        const C = this.config.COUNT;
+        const TOTAL = this.config.COUNT + this.config.MAX_USER_BALLS;
         const p = this.positions;
         const s = this.sizes;
         
-  
-        for (let i = 0; i < C; i++) {
+
+        for (let i = 0; i < TOTAL; i++) {
           const b = 3 * i;
           this._tmpObj.position.set(p[b + 0], p[b + 1], p[b + 2]);
           this._tmpObj.scale.setScalar(Math.max(s[i], 0));
