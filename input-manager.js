@@ -1,17 +1,17 @@
 /**
  * Unified Input Manager for WebGL Cursor Effects
- * 
+ *
  * This module provides a unified input management system for both WebGL-based cursor effects:
  * - Fluid Cursor: WebGL fluid simulation with pointer tracking
  * - Ballpit Cursor: Interactive ball physics with multi-user support
- * 
+ *
  * Features:
  * - Multi-pointer input handling (mouse, eye gaze, etc.)
  * - Dynamic user ball spawning for multi-user scenarios
  * - Input prioritization (mouse over eye gaze)
  * - Automatic cleanup of inactive users
  * - Cross-cursor compatibility and unified API
- * 
+ *
  * @author Squidly Team
  * @version 1.0.0
  * @class InputManager
@@ -19,7 +19,7 @@
 class InputManager {
   /**
    * Create a new InputManager instance
-   * 
+   *
    * @param {Object} owner - The cursor instance that owns this InputManager
    * @param {Object} [options={}] - Configuration options
    * @param {string} [options.cursorType='fluid'] - Type of cursor ('fluid' or 'ballpit')
@@ -30,38 +30,38 @@ class InputManager {
   constructor(owner, options = {}) {
     /** @type {Object} The cursor instance that owns this InputManager */
     this.owner = owner;
-    
+
     /** @type {Object} Configuration options */
     this.options = {
-      cursorType: options.cursorType || 'fluid',
+      cursorType: options.cursorType || "fluid",
       useBallAssignment: options.useBallAssignment || false,
       inactiveTimeout: options.inactiveTimeout || 5000,
       firstUserBallIndex: options.firstUserBallIndex || 1,
-      ...options
+      ...options,
     };
 
     /** @type {Map<string, Object>} Internal pointer storage */
     this._pointers = new Map();
-    
+
     /** @type {Map<string, number>} Ball assignment for ALL users (mouse + remote) in ballpit cursor */
     this._userBallIndices = new Map(); // userType -> ballIndex
-    
+
     /** @type {number} Next available ball index — starts at firstUserBallIndex so user balls live beyond the follower pool */
     this._nextAvailableBallIndex = this.options.firstUserBallIndex;
-    
+
     /** @type {Object} Performance and usage statistics */
     this._stats = {
       totalUpdates: 0,
-      lastCleanup: performance.now()
+      lastCleanup: performance.now(),
     };
   }
 
   /**
    * Update pointer position for the specified user/pointer
-   * 
+   *
    * This is the main entry point for all pointer input. It handles both fluid and ballpit
    * cursor types, manages pointer lifecycle, and delegates to appropriate handlers.
-   * 
+   *
    * @param {number} x - X coordinate of the pointer
    * @param {number} y - Y coordinate of the pointer
    * @param {Array|string|null} [color=null] - Color for the pointer effect
@@ -70,12 +70,18 @@ class InputManager {
   updatePointerPosition(x, y, color = null, id = "default") {
     // Safety check for undefined coordinates
     if (x === undefined || y === undefined || x === null || y === null) {
-      console.warn("InputManager: Invalid coordinates received:", x, y, "for user:", id);
+      console.warn(
+        "InputManager: Invalid coordinates received:",
+        x,
+        y,
+        "for user:",
+        id,
+      );
       return;
     }
-    
+
     const pointer = this._getOrCreatePointer(id, color);
-    
+
     // Update pointer data
     pointer.x = x;
     pointer.y = y;
@@ -84,7 +90,7 @@ class InputManager {
     this._stats.totalUpdates++;
 
     // Handle based on cursor type
-    if (this.options.cursorType === 'ballpit') {
+    if (this.options.cursorType === "ballpit") {
       this._handleBallpitInput(pointer);
     } else {
       this._handleFluidInput(pointer);
@@ -98,11 +104,11 @@ class InputManager {
 
   /**
    * Handle input for ballpit cursor type
-   * 
+   *
    * Processes pointer input for ballpit cursor. Assigns a dynamic ball index to
    * ALL users (including mouse) so that every participant gets a dedicated ball
    * that lives outside the follower pool.
-   * 
+   *
    * @param {Object} pointer - The pointer object to process
    * @private
    */
@@ -118,29 +124,47 @@ class InputManager {
 
   /**
    * Handle input for fluid cursor type
-   * 
+   *
    * Processes pointer input for WebGL fluid simulation. Scales coordinates by pixel ratio,
    * updates pointer data, and ensures proper pointer management for fluid effects.
-   * 
+   *
    * @param {Object} pointer - The pointer object to process
    * @private
    */
   _handleFluidInput(pointer) {
     // Safety check - ensure owner and canvas exist
     if (!this.owner || !this.owner.canvas) {
-      console.warn("Owner or canvas is null in _handleFluidInput, skipping update");
+      console.warn(
+        "Owner or canvas is null in _handleFluidInput, skipping update",
+      );
       return;
     }
-    
+
     // Use the same render logic as the owner - delegate all coordinate transformation
     // and pointer updates to the owner's internal methods without separating them
     if (this.owner._handlePointerInput) {
-      this.owner._handlePointerInput(pointer.x, pointer.y, pointer.color, pointer.id || "default");
-    } else if (this.owner._scaleByPixelRatio && this.owner._updatePointerMoveData && this.owner._getOrCreatePointer) {
+      this.owner._handlePointerInput(
+        pointer.x,
+        pointer.y,
+        pointer.color,
+        pointer.id || "default",
+      );
+    } else if (
+      this.owner._scaleByPixelRatio &&
+      this.owner._updatePointerMoveData &&
+      this.owner._getOrCreatePointer
+    ) {
+      if (this.owner.ready === false) {
+        return;
+      }
+
       // Fallback to legacy method if _handlePointerInput not available
       const posX = this.owner._scaleByPixelRatio(pointer.x);
       const posY = this.owner._scaleByPixelRatio(pointer.y);
-      const ownerPtr = this.owner._getOrCreatePointer(pointer.id || "default", pointer.color);
+      const ownerPtr = this.owner._getOrCreatePointer(
+        pointer.id || "default",
+        pointer.color,
+      );
       this.owner._updatePointerMoveData(ownerPtr, posX, posY, pointer.color);
       ownerPtr.moved = true;
     }
@@ -148,10 +172,10 @@ class InputManager {
 
   /**
    * Get or create a pointer object for the specified ID
-   * 
+   *
    * Creates a new pointer if one doesn't exist, or returns the existing one.
    * Handles color assignment and pointer initialization.
-   * 
+   *
    * @param {string} id - Unique identifier for the pointer
    * @param {Array|string|null} [color=null] - Color for the pointer
    * @returns {Object} The pointer object
@@ -165,7 +189,7 @@ class InputManager {
         y: 0,
         lastSeen: 0,
         color: color,
-        ballIndex: null // Ball index is assigned dynamically for all users
+        ballIndex: null, // Ball index is assigned dynamically for all users
       });
     }
     return this._pointers.get(id);
@@ -173,11 +197,11 @@ class InputManager {
 
   /**
    * Assign a unique ball index for a user
-   * 
+   *
    * Assigns a unique ball index to a user for the ballpit cursor.
    * Applies to ALL users (mouse, eye gaze, remote, etc.) so each person
    * gets their own dedicated ball outside the follower pool.
-   * 
+   *
    * @param {string} userType - The user type identifier
    * @private
    */
@@ -198,10 +222,10 @@ class InputManager {
 
   /**
    * Release ball index from user and clean up pointer
-   * 
+   *
    * Removes the ball index assignment and deletes the pointer from storage.
    * Used when a user becomes inactive or disconnects.
-   * 
+   *
    * @param {string} userType - The user type identifier to release
    * @private
    */
@@ -222,10 +246,10 @@ class InputManager {
 
   /**
    * Get all active pointers
-   * 
+   *
    * Returns a copy of all currently active pointers with their current state.
    * Useful for debugging and external monitoring.
-   * 
+   *
    * @returns {Array<Object>} Array of pointer objects with current state
    * @public
    */
@@ -236,16 +260,16 @@ class InputManager {
       y: pointer.y,
       lastSeen: pointer.lastSeen,
       color: pointer.color,
-      ballIndex: pointer.ballIndex
+      ballIndex: pointer.ballIndex,
     }));
   }
 
   /**
    * Get the target pointer with input prioritization
-   * 
+   *
    * Returns the most appropriate pointer to use for cursor effects.
    * Prioritizes mouse input over eye gaze input.
-   * 
+   *
    * @returns {Object|null} Target pointer object or null if no active pointers
    * @public
    */
@@ -269,10 +293,10 @@ class InputManager {
 
   /**
    * Get user ball indices mapping
-   * 
+   *
    * Returns a copy of the current ball index assignments for all users (mouse + remote).
    * Useful for debugging and external monitoring of ball assignments.
-   * 
+   *
    * @returns {Map<string, number>} Map of userType -> ballIndex
    * @public
    */
@@ -291,10 +315,10 @@ class InputManager {
 
   /**
    * Get a specific pointer by its ID
-   * 
+   *
    * Retrieves a pointer object by its unique identifier.
    * Returns null if the pointer doesn't exist.
-   * 
+   *
    * @param {string} id - The unique pointer identifier
    * @returns {Object|null} Pointer object or null if not found
    * @public
@@ -305,7 +329,7 @@ class InputManager {
 
   /**
    * Check if a pointer exists by its ID
-   * 
+   *
    * @param {string} id - The unique pointer identifier to check
    * @returns {boolean} True if pointer exists, false otherwise
    * @public
@@ -316,9 +340,9 @@ class InputManager {
 
   /**
    * Remove a specific pointer by its ID
-   * 
+   *
    * Removes the pointer from storage and handles ball index cleanup if needed.
-   * 
+   *
    * @param {string} id - The unique pointer identifier to remove
    * @returns {boolean} True if pointer was removed, false if it didn't exist
    * @public
@@ -337,10 +361,10 @@ class InputManager {
 
   /**
    * Clean up inactive users based on timeout
-   * 
+   *
    * Removes users who haven't been active for the specified timeout period.
    * Mouse users are never cleaned up automatically.
-   * 
+   *
    * @param {number} [timeoutMs=null] - Timeout in milliseconds (uses default if null)
    * @returns {number} Number of users removed
    * @public
@@ -349,15 +373,15 @@ class InputManager {
     const timeout = timeoutMs || this.options.inactiveTimeout;
     const now = performance.now();
     let removed = 0;
-    
+
     const toRemove = [];
     for (const [id, pointer] of this._pointers.entries()) {
-      if (id !== "mouse" && (now - pointer.lastSeen) > timeout) {
+      if (id !== "mouse" && now - pointer.lastSeen > timeout) {
         toRemove.push(id);
       }
     }
-    
-    toRemove.forEach(id => {
+
+    toRemove.forEach((id) => {
       if (this.options.useBallAssignment) {
         this._releaseBallIndex(id);
       } else {
@@ -365,34 +389,34 @@ class InputManager {
       }
       removed++;
     });
-    
+
     if (removed > 0) {
       console.log(`Cleaned up ${removed} inactive users`);
     }
-    
+
     return removed;
   }
 
   /**
    * Clear all non-mouse pointers
-   * 
+   *
    * Removes all pointers except for the mouse pointer. Useful for cleanup
    * when switching contexts or resetting the input state.
-   * 
+   *
    * @returns {number} Number of pointers removed
    * @public
    */
   clearNonMousePointers() {
     let removed = 0;
     const toRemove = [];
-    
+
     for (const [id, pointer] of this._pointers.entries()) {
       if (id !== "mouse") {
         toRemove.push(id);
       }
     }
-    
-    toRemove.forEach(id => {
+
+    toRemove.forEach((id) => {
       if (this.options.useBallAssignment) {
         this._releaseBallIndex(id);
       } else {
@@ -400,23 +424,23 @@ class InputManager {
       }
       removed++;
     });
-    
+
     return removed;
   }
 
   /**
    * Get usage statistics and performance metrics
-   * 
+   *
    * Returns comprehensive statistics about the current state of the InputManager
    * including active pointers, performance metrics, and system health.
-   * 
+   *
    * @returns {Object} Statistics object with current state information
    * @public
    */
   getStats() {
     const now = performance.now();
     const activePointers = this.getActivePointers();
-    
+
     return {
       totalPointers: this._pointers.size,
       mouseActive: this._pointers.has("mouse"),
@@ -426,16 +450,16 @@ class InputManager {
       lastCleanup: this._stats.lastCleanup,
       timeSinceLastCleanup: now - this._stats.lastCleanup,
       cursorType: this.options.cursorType,
-      useBallAssignment: this.options.useBallAssignment
+      useBallAssignment: this.options.useBallAssignment,
     };
   }
 
   /**
    * Update internal statistics timestamp
-   * 
+   *
    * Updates the last cleanup timestamp for performance monitoring.
    * Called internally during cleanup operations.
-   * 
+   *
    * @private
    */
   _updateStats() {
@@ -444,10 +468,10 @@ class InputManager {
 
   /**
    * Reset all data and return to initial state
-   * 
+   *
    * Clears all pointers, ball assignments, and statistics. Useful for
    * complete system reset or when switching contexts.
-   * 
+   *
    * @public
    */
   reset() {
@@ -456,30 +480,30 @@ class InputManager {
     this._nextAvailableBallIndex = this.options.firstUserBallIndex;
     this._stats = {
       totalUpdates: 0,
-      lastCleanup: performance.now()
+      lastCleanup: performance.now(),
     };
   }
 
   /**
    * Set cursor type and reconfigure the InputManager
-   * 
+   *
    * Updates the cursor type and automatically configures ball assignment
    * based on the cursor type (enabled for ballpit, disabled for fluid).
-   * 
+   *
    * @param {string} type - The cursor type ('fluid' or 'ballpit')
    * @public
    */
   setCursorType(type) {
     this.options.cursorType = type;
-    this.options.useBallAssignment = (type === 'ballpit');
+    this.options.useBallAssignment = type === "ballpit";
   }
 }
 
 // Export for different module systems
-if (typeof module !== 'undefined' && module.exports) {
+if (typeof module !== "undefined" && module.exports) {
   module.exports = InputManager;
-} else if (typeof define === 'function' && define.amd) {
-  define([], function() {
+} else if (typeof define === "function" && define.amd) {
+  define([], function () {
     return InputManager;
   });
 } else {

@@ -7,35 +7,43 @@
  * - Proper resource cleanup via destroy()
  */
 
-import InputManager from './input-manager.js';
-import { CollisionSoundEngine } from './sound-engine.js';
+import InputManager from "./input-manager.js";
+import { CollisionSoundEngine } from "./sound-engine.js";
 
 // Dynamically import OGL (Renderer, Program, Mesh, Triangle, Transform, Vec3)
-const oglCdn = 'https://cdn.jsdelivr.net/npm/ogl@0.0.95/src/index.mjs';
+const oglCdn = "https://cdn.jsdelivr.net/npm/ogl@0.0.95/src/index.mjs";
 
 function parseHexColor(hex) {
-  const c = hex.replace('#','');
-  const r = parseInt(c.slice(0,2),16)/255;
-  const g = parseInt(c.slice(2,4),16)/255;
-  const b = parseInt(c.slice(4,6),16)/255;
-  return [r,g,b];
+  const c = hex.replace("#", "");
+  const r = parseInt(c.slice(0, 2), 16) / 255;
+  const g = parseInt(c.slice(2, 4), 16) / 255;
+  const b = parseInt(c.slice(4, 6), 16) / 255;
+  return [r, g, b];
 }
 
-function fract(x){ return x - Math.floor(x); }
-function hash31(p){
-  let r=[p*0.1031,p*0.103,p*0.0973].map(fract);
-  const yzx=[r[1],r[2],r[0]];
-  const dotVal = r[0]*(yzx[0]+33.33)+r[1]*(yzx[1]+33.33)+r[2]*(yzx[2]+33.33);
-  for(let i=0;i<3;i++) r[i]=fract(r[i]+dotVal);
+function fract(x) {
+  return x - Math.floor(x);
+}
+function hash31(p) {
+  let r = [p * 0.1031, p * 0.103, p * 0.0973].map(fract);
+  const yzx = [r[1], r[2], r[0]];
+  const dotVal =
+    r[0] * (yzx[0] + 33.33) + r[1] * (yzx[1] + 33.33) + r[2] * (yzx[2] + 33.33);
+  for (let i = 0; i < 3; i++) r[i] = fract(r[i] + dotVal);
   return r;
 }
-function hash33(v){
-  let p=[v[0]*0.1031,v[1]*0.103,v[2]*0.0973].map(fract);
-  const yxz=[p[1],p[0],p[2]];
-  const dotVal=p[0]*(yxz[0]+33.33)+p[1]*(yxz[1]+33.33)+p[2]*(yxz[2]+33.33);
-  for(let i=0;i<3;i++) p[i]=fract(p[i]+dotVal);
-  const xxy=[p[0],p[0],p[1]], yxx=[p[1],p[0],p[0]], zyx=[p[2],p[1],p[0]];
-  const out=[]; for(let i=0;i<3;i++) out[i]=fract((xxy[i]+yxx[i])*zyx[i]); return out;
+function hash33(v) {
+  let p = [v[0] * 0.1031, v[1] * 0.103, v[2] * 0.0973].map(fract);
+  const yxz = [p[1], p[0], p[2]];
+  const dotVal =
+    p[0] * (yxz[0] + 33.33) + p[1] * (yxz[1] + 33.33) + p[2] * (yxz[2] + 33.33);
+  for (let i = 0; i < 3; i++) p[i] = fract(p[i] + dotVal);
+  const xxy = [p[0], p[0], p[1]],
+    yxx = [p[1], p[0], p[0]],
+    zyx = [p[2], p[1], p[0]];
+  const out = [];
+  for (let i = 0; i < 3; i++) out[i] = fract((xxy[i] + yxx[i]) * zyx[i]);
+  return out;
 }
 
 const vertex = `#version 300 es
@@ -127,7 +135,8 @@ class WebGLMetaBallsCursor {
 
     this.soundEngine = new CollisionSoundEngine({
       masterGain: 0.4,
-      collisionSoundUrl: configOverrides.collisionSoundUrl || './sfx/water-drip.mp3',
+      collisionSoundUrl:
+        configOverrides.collisionSoundUrl || "./sfx/water-drip.mp3",
       soundCooldown: 150,
       soundEnabled: true,
     });
@@ -144,56 +153,69 @@ class WebGLMetaBallsCursor {
         COLOR: [1, 1, 1],
         CURSOR_COLOR: [1, 1, 1],
         ENABLE_TRANSPARENCY: true,
-        CURSOR_INTERACTION: true
+        CURSOR_INTERACTION: true,
       },
-      configOverrides || {}
+      configOverrides || {},
     );
 
     // === overlay canvas like the others
-    this.canvas = document.createElement('canvas');
+    this.canvas = document.createElement("canvas");
     Object.assign(this.canvas.style, {
-      position: 'fixed',
-      zIndex: '9999',
-      pointerEvents: 'none',
-      background: 'transparent'
+      position: "fixed",
+      zIndex: "9999",
+      pointerEvents: "none",
+      background: "transparent",
     });
     document.body.appendChild(this.canvas);
     this._updateCanvasPosition();
 
     // unified inputs (treat as "fluid" branch so InputManager calls our _updatePointerMoveData)
     this.inputManager = new InputManager(this, {
-      cursorType: 'fluid',     // <- reuse fluid path in InputManager
+      cursorType: "fluid", // <- reuse fluid path in InputManager
       useBallAssignment: false,
-      inactiveTimeout: 5000
+      inactiveTimeout: 5000,
     });
 
     // optional auto mouse (kept for parity with your other cursors)
     this._autoMouse = autoMouseEvents;
     if (this._autoMouse) {
       this._onMouseMove = (e) =>
-        this.inputManager.updatePointerPosition(e.clientX, e.clientY, null, 'mouse');
-      window.addEventListener('mousemove', this._onMouseMove, { passive: true });
+        this.inputManager.updatePointerPosition(
+          e.clientX,
+          e.clientY,
+          null,
+          "mouse",
+        );
+      window.addEventListener("mousemove", this._onMouseMove, {
+        passive: true,
+      });
     }
 
     // events
     this._onResize = this._onResize.bind(this);
-    window.addEventListener('resize', this._onResize);
+    window.addEventListener("resize", this._onResize);
 
-    this._init().catch(() => {});
+    this._init().catch((error) => {
+      console.error("WebGLMetaBallsCursor initialization failed:", error);
+    });
   }
 
   // === public API (pause/play are no-ops here, kept for symmetry) =========
-  pause() { /* optional to implement */ }
-  play() { /* optional to implement */ }
+  pause() {
+    /* optional to implement */
+  }
+  play() {
+    /* optional to implement */
+  }
 
   /**
    * Set the volume for metaball collisions
-   * 
+   *
    * @param {number} volume - Volume level (0.0 to 1.0)
-   * 
+   *
    * @example
    * metaballs.setVolume(0.5);
-   * 
+   *
    * @public
    */
   setVolume(volume) {
@@ -204,27 +226,42 @@ class WebGLMetaBallsCursor {
 
   destroy() {
     if (this.animationId) cancelAnimationFrame(this.animationId);
-    window.removeEventListener('resize', this._onResize);
-    if (this._autoMouse && this._onMouseMove) window.removeEventListener('mousemove', this._onMouseMove);
-    
+    window.removeEventListener("resize", this._onResize);
+    if (this._autoMouse && this._onMouseMove)
+      window.removeEventListener("mousemove", this._onMouseMove);
+
     // Clean up sound engine
     if (this.soundEngine) {
       this.soundEngine.destroy();
       this.soundEngine = null;
     }
-    
-    try { this.gl?.getExtension('WEBGL_lose_context')?.loseContext(); } catch {}
+
+    try {
+      this.gl?.getExtension("WEBGL_lose_context")?.loseContext();
+    } catch {}
     this.canvas?.parentElement?.removeChild(this.canvas);
     this.ready = false;
   }
 
   // === input plumbing expected by InputManager's "fluid" branch =============
-  _scaleByPixelRatio(v){ return Math.floor(v * (window.devicePixelRatio || 1)); }
-  _pointerKey(id="default"){ return `mouse:${id}`; }
-  _createPointer(_type="mouse", id="default"){
-    return { id, texcoordX: 0, texcoordY: 0, moved: false, color: null, deltaX:0, deltaY:0 };
+  _scaleByPixelRatio(v) {
+    return Math.floor(v * (window.devicePixelRatio || 1));
   }
-  _registerPointer(id="default", color=null){
+  _pointerKey(id = "default") {
+    return `mouse:${id}`;
+  }
+  _createPointer(_type = "mouse", id = "default") {
+    return {
+      id,
+      texcoordX: 0,
+      texcoordY: 0,
+      moved: false,
+      color: null,
+      deltaX: 0,
+      deltaY: 0,
+    };
+  }
+  _registerPointer(id = "default", color = null) {
     this.pointerMap ||= new Map();
     const key = this._pointerKey(id);
     if (this.pointerMap.has(key)) return this.pointerMap.get(key);
@@ -233,11 +270,15 @@ class WebGLMetaBallsCursor {
     this.pointerMap.set(key, p);
     return p;
   }
-  _getOrCreatePointer(id="default", color=null){
+  _getOrCreatePointer(id = "default", color = null) {
     const key = this._pointerKey(id);
     return this.pointerMap?.get(key) ?? this._registerPointer(id, color);
   }
-  _updatePointerMoveData(pointer, px, py /*, color */){
+  _updatePointerMoveData(pointer, px, py /*, color */) {
+    if (!this.gl || !this.gl.canvas) {
+      return;
+    }
+
     // convert screen px -> canvas pixels & set iMouse
     const x = px;
     const y = this.gl.canvas.height - py; // Invert Y coordinate for WebGL
@@ -249,48 +290,58 @@ class WebGLMetaBallsCursor {
   // === setup ================================================================
   async _init() {
     this.ogl = await import(oglCdn);
-    const {Renderer, Camera, Triangle, Program, Mesh, Transform, Vec3} = this.ogl;
+    const { Renderer, Camera, Triangle, Program, Mesh, Transform, Vec3 } =
+      this.ogl;
 
     this.renderer = new Renderer({
       canvas: this.canvas,
       dpr: 1,
       alpha: true,
-      premultipliedAlpha: false
+      premultipliedAlpha: false,
     });
     this.gl = this.renderer.gl;
     this.gl.clearColor(0, 0, 0, this.config.ENABLE_TRANSPARENCY ? 0 : 1);
 
     // camera for fullscreen tri
-    this.camera = new Camera(this.gl, { left:-1, right:1, top:1, bottom:-1, near:0.1, far:10 });
+    this.camera = new Camera(this.gl, {
+      left: -1,
+      right: 1,
+      top: 1,
+      bottom: -1,
+      near: 0.1,
+      far: 10,
+    });
     this.camera.position.z = 1;
 
     const geometry = new Triangle(this.gl);
 
     // uniforms
-    const iResolution = new Vec3(0,0,0);
-    const iMouse = new Vec3(0,0,0);
+    const iResolution = new Vec3(0, 0, 0);
+    const iMouse = new Vec3(0, 0, 0);
 
-    const [r1,g1,b1] = this.config.COLOR;
-    const [r2,g2,b2] = this.config.CURSOR_COLOR;
+    const [r1, g1, b1] = this.config.COLOR;
+    const [r2, g2, b2] = this.config.CURSOR_COLOR;
 
     // pre-alloc metaballs
-    for (let i=0;i<50;i++) this.metaBalls.push(new this.ogl.Vec3(0,0,0));
+    for (let i = 0; i < 50; i++)
+      this.metaBalls.push(new this.ogl.Vec3(0, 0, 0));
 
     this.program = new Program(this.gl, {
-      vertex, fragment,
+      vertex,
+      fragment,
       uniforms: {
         iTime: { value: 0 },
         iResolution: { value: iResolution },
         iMouse: { value: iMouse },
-        iColor: { value: new this.ogl.Vec3(r1,g1,b1) },
-        iCursorColor: { value: new this.ogl.Vec3(r2,g2,b2) },
+        iColor: { value: new this.ogl.Vec3(r1, g1, b1) },
+        iCursorColor: { value: new this.ogl.Vec3(r2, g2, b2) },
         iAnimationSize: { value: this.config.ANIMATION_SIZE },
         iBallCount: { value: Math.min(this.config.BALL_COUNT, 50) },
         iCursorBallSize: { value: this.config.CURSOR_BALL_SIZE },
         iMetaBalls: { value: this.metaBalls },
         iClumpFactor: { value: this.config.CLUMP_FACTOR },
         enableTransparency: { value: !!this.config.ENABLE_TRANSPARENCY },
-      }
+      },
     });
 
     // after this.program = new Program(...):
@@ -298,16 +349,15 @@ class WebGLMetaBallsCursor {
     this.pointerPosRad = [];
     this.pointerColors = [];
     for (let i = 0; i < this.MAX_POINTERS; i++) {
-    this.pointerPosRad.push(new this.ogl.Vec3(0, 0, 0));
-    this.pointerColors.push(new this.ogl.Vec3(1, 1, 1));
+      this.pointerPosRad.push(new this.ogl.Vec3(0, 0, 0));
+      this.pointerColors.push(new this.ogl.Vec3(1, 1, 1));
     }
 
     Object.assign(this.program.uniforms, {
-    iPointerCount: { value: 0 },
-    iPointerPosRad: { value: this.pointerPosRad },
-    iPointerColors: { value: this.pointerColors },
+      iPointerCount: { value: 0 },
+      iPointerPosRad: { value: this.pointerPosRad },
+      iPointerColors: { value: this.pointerColors },
     });
-
 
     this.mesh = new Mesh(this.gl, { geometry, program: this.program });
     this.scene = new Transform();
@@ -315,15 +365,15 @@ class WebGLMetaBallsCursor {
 
     // seed metaball params
     const n = Math.min(this.config.BALL_COUNT, 50);
-    for (let i=0;i<n;i++){
-      const idx = i+1;
+    for (let i = 0; i < n; i++) {
+      const idx = i + 1;
       const h1 = hash31(idx);
-      const st = h1[0] * (2*Math.PI);
-      const dtFactor = 0.1*Math.PI + h1[1]*(0.4*Math.PI - 0.1*Math.PI);
+      const st = h1[0] * (2 * Math.PI);
+      const dtFactor = 0.1 * Math.PI + h1[1] * (0.4 * Math.PI - 0.1 * Math.PI);
       const baseScale = 5.0 + h1[1] * (10.0 - 5.0);
       const h2 = hash33(h1);
-      const toggle = Math.floor(h2[0]*2.0);
-      const radius = 0.5 + h2[2]*(2.0 - 0.5);
+      const toggle = Math.floor(h2[0] * 2.0);
+      const radius = 0.5 + h2[2] * (2.0 - 0.5);
       this.ballParams.push({ st, dtFactor, baseScale, toggle, radius });
     }
 
@@ -340,52 +390,59 @@ class WebGLMetaBallsCursor {
     this._loop();
   }
 
-  _onResize(){
+  _onResize() {
     this._updateCanvasPosition();
-    const w = Math.floor(window.innerWidth * (window.devicePixelRatio||1));
-    const h = Math.floor(window.innerHeight * (window.devicePixelRatio||1));
+    const w = Math.floor(window.innerWidth * (window.devicePixelRatio || 1));
+    const h = Math.floor(window.innerHeight * (window.devicePixelRatio || 1));
     this.renderer.setSize(w, h);
-    this.canvas.style.width = window.innerWidth + 'px';
-    this.canvas.style.height = window.innerHeight + 'px';
-    this.program.uniforms.iResolution.value.set(this.gl.drawingBufferWidth, this.gl.drawingBufferHeight, 0);
+    this.canvas.style.width = window.innerWidth + "px";
+    this.canvas.style.height = window.innerHeight + "px";
+    this.program.uniforms.iResolution.value.set(
+      this.gl.drawingBufferWidth,
+      this.gl.drawingBufferHeight,
+      0,
+    );
   }
 
   _updateCanvasPosition() {
     // Canvas fills the entire viewport (iframe or window)
     // Coordinates from parent are already iframe-relative via _toIframeCoords()
-    this.canvas.style.top = '0';
-    this.canvas.style.left = '0';
-    this.canvas.style.width = '100vw';
-    this.canvas.style.height = '100vh';
+    this.canvas.style.top = "0";
+    this.canvas.style.left = "0";
+    this.canvas.style.width = "100vw";
+    this.canvas.style.height = "100vh";
   }
 
   _checkCollisions() {
     if (!this.soundEngine) return;
-    
+
     const scale = this.config.ANIMATION_SIZE / this.gl.canvas.height;
-    const res = { x: this.gl.drawingBufferWidth, y: this.gl.drawingBufferHeight };
-    
+    const res = {
+      x: this.gl.drawingBufferWidth,
+      y: this.gl.drawingBufferHeight,
+    };
+
     // Check each active pointer against each animated ball
     for (let p = 0; p < this.MAX_POINTERS; p++) {
       if (p >= this.program.uniforms.iPointerCount.value) break;
-      
+
       const ptrX = (this.pointerPosRad[p].x - res.x * 0.5) * scale;
       const ptrY = (this.pointerPosRad[p].y - res.y * 0.5) * scale;
       const ptrRad = this.pointerPosRad[p].z;
-      
+
       for (let b = 0; b < this.ballParams.length; b++) {
         const ballX = this.metaBalls[b].x;
         const ballY = this.metaBalls[b].y;
         const ballRad = this.metaBalls[b].z;
-        
+
         const dx = ptrX - ballX;
         const dy = ptrY - ballY;
         const dist = Math.sqrt(dx * dx + dy * dy);
-        const isColliding = dist < (ptrRad + ballRad);
-        
+        const isColliding = dist < ptrRad + ballRad;
+
         const key = `${p}-${b}`;
         const wasColliding = this.collisionStates.get(key);
-        
+
         if (isColliding && !wasColliding) {
           // Entering collision
           this.soundEngine.playCollision(0.5);
@@ -399,7 +456,7 @@ class WebGLMetaBallsCursor {
     }
   }
 
-  _loop(){
+  _loop() {
     this.animationId = requestAnimationFrame(() => this._loop());
     if (!this.ready) return;
 
@@ -407,8 +464,9 @@ class WebGLMetaBallsCursor {
     this.program.uniforms.iTime.value = t;
 
     // animate balls
-    const s = this.config.SPEED, cf = this.config.CLUMP_FACTOR;
-    for (let i=0;i<this.ballParams.length;i++){
+    const s = this.config.SPEED,
+      cf = this.config.CLUMP_FACTOR;
+    for (let i = 0; i < this.ballParams.length; i++) {
       const p = this.ballParams[i];
       const dt = t * s * p.dtFactor;
       const th = p.st + dt;
@@ -422,10 +480,11 @@ class WebGLMetaBallsCursor {
     // smooth pointer
     const ease = this.config.HOVER_SMOOTHNESS;
     const inside = this.config.CURSOR_INTERACTION; // always true via InputManager updates
-    let targetX = this._targetMouseX, targetY = this._targetMouseY;
+    let targetX = this._targetMouseX,
+      targetY = this._targetMouseY;
 
     // if no input yet, idle orbit
-    if (!inside && (this._targetMouseX===undefined)) {
+    if (!inside && this._targetMouseX === undefined) {
       const cx = this.gl.canvas.width * 0.5;
       const cy = this.gl.canvas.height * 0.5;
       const rx = this.gl.canvas.width * 0.15;
@@ -444,22 +503,22 @@ class WebGLMetaBallsCursor {
     let count = 0;
 
     for (let i = 0; i < active.length && count < this.MAX_POINTERS; i++) {
-    const p = active[i];
+      const p = active[i];
 
-    // Convert to canvas pixels & invert Y for WebGL-style coords
-    const xPix = this._scaleByPixelRatio(p.x);
-    const yPix = this.gl.canvas.height - this._scaleByPixelRatio(p.y);
+      // Convert to canvas pixels & invert Y for WebGL-style coords
+      const xPix = this._scaleByPixelRatio(p.x);
+      const yPix = this.gl.canvas.height - this._scaleByPixelRatio(p.y);
 
-    // radius per-pointer (could vary by pointer later)
-    const rad = this.config.CURSOR_BALL_SIZE;
+      // radius per-pointer (could vary by pointer later)
+      const rad = this.config.CURSOR_BALL_SIZE;
 
-    this.pointerPosRad[count].set(xPix, yPix, rad);
+      this.pointerPosRad[count].set(xPix, yPix, rad);
 
-    // use pointer color if present, else default cursor color
-    const col = Array.isArray(p.color) ? p.color : this.config.CURSOR_COLOR;
-    this.pointerColors[count].set(col[0], col[1], col[2]);
+      // use pointer color if present, else default cursor color
+      const col = Array.isArray(p.color) ? p.color : this.config.CURSOR_COLOR;
+      this.pointerColors[count].set(col[0], col[1], col[2]);
 
-    count++;
+      count++;
     }
 
     this.program.uniforms.iPointerCount.value = count;
@@ -467,9 +526,9 @@ class WebGLMetaBallsCursor {
     // (Optional) still set iMouse to the "primary" pointer for any other logic
     const primary = this.inputManager.getTargetPointer(); // mouse preferred
     if (primary) {
-    const xPix = this._scaleByPixelRatio(primary.x);
-    const yPix = this.gl.canvas.height - this._scaleByPixelRatio(primary.y);
-    this.program.uniforms.iMouse.value.set(xPix, yPix, 0);
+      const xPix = this._scaleByPixelRatio(primary.x);
+      const yPix = this.gl.canvas.height - this._scaleByPixelRatio(primary.y);
+      this.program.uniforms.iMouse.value.set(xPix, yPix, 0);
     }
 
     // Check for collisions between pointer metaballs and animated metaballs
